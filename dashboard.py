@@ -57,16 +57,6 @@ st.markdown("""
         cursor: pointer !important;
     }
 
-    /* Disabled Button Styling */
-    button:disabled,
-    button[disabled],
-    .stButton > button:disabled {
-        background-color: #e0e0e0 !important;
-        color: #888888 !important;
-        border-color: #cccccc !important;
-        cursor: not-allowed !important;
-    }
-
     /* Interactive Link Hover Effects */
     a {
         color: #003366 !important;
@@ -241,36 +231,24 @@ if not st.session_state['logged_in']:
 
         l_n1, l_n2, l_ans = get_locked_captcha("login")
 
-        login_id = st.text_input("Username (@handle), Email, or Phone Number", value=preset_login, placeholder="e.g. user_handle, name@email.com, or +923001234567", key="login_id_input")
-        login_password = st.text_input("Password", type="password", value=preset_password, key="login_pw_input")
+        # FORM WRAPPER FOR ENTER KEY PRESS SUPPORT
+        with st.form("login_form", clear_on_submit=False):
+            login_id = st.text_input("Username (@handle), Email, or Phone Number", value=preset_login, placeholder="e.g. user_handle, name@email.com, or +923001234567", key="login_id_input")
+            login_password = st.text_input("Password", type="password", value=preset_password, key="login_pw_input")
 
-        # Captcha Field
-        st.markdown("#### 🤖 Human Verification")
-        c_col1, c_col2 = st.columns([4, 1])
-        with c_col1:
+            st.markdown("#### 🤖 Human Verification")
             login_captcha = st.text_input(f"Question: What is {l_n1} + {l_n2} ? *", placeholder="Enter sum answer", key="login_cap_input")
-        with c_col2:
-            st.write(" ")
-            st.write(" ")
-            if st.button("🔄", key="login_cap_reload", help="Click to reload a new simple captcha question"):
-                refresh_locked_captcha("login")
-                st.rerun()
 
-        # Dynamic Values Read directly from Session State
-        val_id = str(st.session_state.get('login_id_input', login_id)).strip()
-        val_pw = str(st.session_state.get('login_pw_input', login_password)).strip()
-        val_cap = str(st.session_state.get('login_cap_input', login_captcha)).strip()
-
-        login_form_valid = bool(val_id) and bool(val_pw) and bool(val_cap)
-
-        if not login_form_valid:
-            st.info("💡 Please fill in your Login ID, Password, and Captcha answer to enable the Login button.")
-
-        # SUBMIT BUTTON WITH HOVER HELP "Submit"
-        submit_login = st.button("🔑 Login to Dashboard", type="primary", disabled=not login_form_valid, help="Submit")
+            submit_login = st.form_submit_button("🔑 Login to Dashboard", type="primary", help="Press Enter or Click to Submit")
 
         if submit_login:
-            if not val_cap.isnumeric() or int(val_cap) != l_ans:
+            val_id = str(login_id).strip()
+            val_pw = str(login_password).strip()
+            val_cap = str(login_captcha).strip()
+
+            if not val_id or not val_pw or not val_cap:
+                st.warning("⚠️ Please fill in all login fields and captcha before submitting.")
+            elif not val_cap.isnumeric() or int(val_cap) != l_ans:
                 refresh_locked_captcha("login")
                 st.error("🚨 Incorrect Captcha answer! A new problem has been generated.")
             else:
@@ -298,7 +276,7 @@ if not st.session_state['logged_in']:
                     if user_doc.exists:
                         user_data = user_doc.to_dict()
                         if user_data['password'] == make_hash(val_pw):
-                            # DIRECT DYNAMIC REDIRECT TRIGGER
+                            # GUARANTEED REDIRECT TO DASHBOARD
                             st.session_state['logged_in'] = True
                             st.session_state['user_email'] = target_email
                             st.session_state['business_id'] = target_email
@@ -310,7 +288,7 @@ if not st.session_state['logged_in']:
                                 "password": val_pw
                             }
                             refresh_locked_captcha("login")
-                            st.rerun() # Immediate Page Refresh to App Dashboard
+                            st.rerun()
                         else:
                             st.error("🚨 Incorrect Password! Please try again.")
                     else:
@@ -327,14 +305,12 @@ if not st.session_state['logged_in']:
             st.info(f"An OTP Verification code was dispatched for **{st.session_state['pending_user_data']['email']}**.")
             st.success(f"🔑 Secret OTP Code: **{st.session_state['generated_otp']}**")
             
-            entered_otp = st.text_input("Enter 6-Digit OTP Code:", max_chars=6, key="otp_input_key")
-            
-            otp_val = str(st.session_state.get('otp_input_key', entered_otp)).strip()
-            otp_valid = bool(otp_val)
-            
-            submit_otp = st.button("✅ Verify OTP & Finalize Account", type="primary", disabled=not otp_valid, help="Submit")
+            with st.form("otp_form"):
+                entered_otp = st.text_input("Enter 6-Digit OTP Code:", max_chars=6, key="otp_input_key")
+                submit_otp = st.form_submit_button("✅ Verify OTP & Finalize Account", type="primary", help="Press Enter or Click to Submit")
             
             if submit_otp:
+                otp_val = str(entered_otp).strip()
                 if otp_val == st.session_state['generated_otp']:
                     data = st.session_state['pending_user_data']
                     
@@ -342,7 +318,7 @@ if not st.session_state['logged_in']:
                     db.collection('usernames').document(data['username']).set({"email": data['email']})
                     db.collection('phone_numbers').document(data['phone_raw']).set({"email": data['email']})
                     
-                    # LOG USER DIRECTLY INTO APP DASHBOARD
+                    # LOG USER DIRECTLY INTO DASHBOARD
                     st.session_state['logged_in'] = True
                     st.session_state['user_email'] = data['email']
                     st.session_state['business_id'] = data['email']
@@ -352,7 +328,7 @@ if not st.session_state['logged_in']:
                     st.session_state['generated_otp'] = ""
                     st.session_state['pending_user_data'] = {}
                     
-                    st.rerun() # Immediate Page Refresh to App Dashboard
+                    st.rerun()
                 else:
                     st.error("❌ Invalid OTP Code. Please re-check and enter again.")
 
@@ -364,101 +340,58 @@ if not st.session_state['logged_in']:
         # SIGNUP FORM STEP
         else:
             st.markdown("### 📝 Create New Business Account")
-            
             s_n1, s_n2, s_ans = get_locked_captcha("signup")
 
-            # 1. Email Input & Availability Check
-            check_email = st.text_input("User Email Address *", placeholder="name@domain.com", key="live_signup_email")
-            email_clean = check_email.lower().strip()
-            
-            email_already_taken = False
-            if email_clean and validate_email_format(email_clean):
-                if db.collection('users').document(email_clean).get().exists:
-                    email_already_taken = True
-                    st.error("🚨 This Email is already registered with another business! Please login or use a different email.")
+            with st.form("signup_form"):
+                check_email = st.text_input("User Email Address *", placeholder="name@domain.com", key="live_signup_email")
+                
+                st.markdown("#### 📞 Contact Phone Number *")
+                p_col1, p_col2 = st.columns([1, 3])
+                with p_col1:
+                    selected_country = st.selectbox("Country Code", list(COUNTRY_DATA.keys()))
+                
+                country_info = COUNTRY_DATA[selected_country]
+                dynamic_placeholder = country_info["placeholder"]
+                
+                with p_col2:
+                    check_phone = st.text_input("Phone Number", placeholder=dynamic_placeholder, key="live_signup_phone")
 
-            # 2. Dynamic Country Code Dropdown & Aligned Phone Placeholder
-            st.markdown("#### 📞 Contact Phone Number *")
-            p_col1, p_col2 = st.columns([1, 3])
-            with p_col1:
-                selected_country = st.selectbox("Country Code", list(COUNTRY_DATA.keys()), label_visibility="collapsed")
-            
-            country_info = COUNTRY_DATA[selected_country]
-            dynamic_placeholder = country_info["placeholder"]
-            
-            with p_col2:
-                check_phone = st.text_input("Phone Number", placeholder=dynamic_placeholder, key="live_signup_phone", label_visibility="collapsed")
+                grid_c1, grid_c2 = st.columns(2)
+                with grid_c1:
+                    password = st.text_input("Unique Password *", type="password", placeholder="8+ chars, Uppercase, Number & Symbol", key="signup_pw_key")
+                    biz_name = st.text_input("Business Name *", placeholder="e.g. Ali Traders, Bismillah Pharmacy", key="signup_biz_key")
 
-            phone_clean = re.sub(r'\D', '', check_phone)
-            extracted_code = country_info["code"]
-            formatted_phone_key = f"+{extracted_code}_{phone_clean}"
+                with grid_c2:
+                    username_input = st.text_input("Choose Unique Username / Handle (Optional)", placeholder="Auto-generated if left empty", key="signup_user_key")
+                    biz_type = st.selectbox("Business Category", ["Grocery Store", "Medical Store / Pharmacy", "General Store", "Services / Consulting", "Wholesale", "Other"])
 
-            phone_already_taken = False
-            if phone_clean:
-                if db.collection('phone_numbers').document(formatted_phone_key).get().exists:
-                    phone_already_taken = True
-                    st.error("🚨 This Phone Number is already linked to an existing business account!")
-
-            # 3. Form Grid
-            grid_c1, grid_c2 = st.columns(2)
-            
-            with grid_c1:
-                password = st.text_input("Unique Password *", type="password", placeholder="8+ chars, Uppercase, Number & Symbol", key="signup_pw_key")
-                biz_name = st.text_input("Business Name *", placeholder="e.g. Ali Traders, Bismillah Pharmacy", key="signup_biz_key")
-
-            with grid_c2:
-                username_input = st.text_input("Choose Unique Username / Handle (Optional)", placeholder="Auto-generated if left empty", key="signup_user_key")
-                biz_type = st.selectbox("Business Category", ["Grocery Store", "Medical Store / Pharmacy", "General Store", "Services / Consulting", "Wholesale", "Other"])
-
-            # 4. Math Captcha Section
-            st.markdown("#### 🤖 Human Verification")
-            sc_col1, sc_col2 = st.columns([4, 1])
-            with sc_col1:
+                st.markdown("#### 🤖 Human Verification")
                 captcha_input = st.text_input(f"Question: What is {s_n1} + {s_n2} ? *", placeholder="Enter sum answer", key="signup_cap_key")
-            with sc_col2:
-                st.write(" ")
-                st.write(" ")
-                if st.button("🔄", key="signup_cap_reload", help="Click to reload a new simple captcha question"):
-                    refresh_locked_captcha("signup")
-                    st.rerun()
+                logo_file = st.file_uploader("Upload Business Logo (PNG / JPG)", type=["png", "jpg", "jpeg"])
 
-            logo_file = st.file_uploader("Upload Business Logo (PNG / JPG)", type=["png", "jpg", "jpeg"])
-
-            # Active Inputs Check
-            v_email = str(st.session_state.get('live_signup_email', check_email)).strip()
-            v_pw = str(st.session_state.get('signup_pw_key', password)).strip()
-            v_biz = str(st.session_state.get('signup_biz_key', biz_name)).strip()
-            v_phone = str(st.session_state.get('live_signup_phone', check_phone)).strip()
-            v_cap = str(st.session_state.get('signup_cap_key', captcha_input)).strip()
-
-            all_required_filled = bool(v_email) and bool(v_pw) and bool(v_biz) and bool(v_phone) and bool(v_cap)
-            
-            signup_button_disabled = (not all_required_filled) or email_already_taken or phone_already_taken
-
-            if signup_button_disabled:
-                if email_already_taken or phone_already_taken:
-                    st.warning("⚠️ Submit button is disabled because the entered Email or Phone Number is already taken.")
-                elif not all_required_filled:
-                    st.info("💡 Please fill in all required fields (*) to enable the verification button.")
-
-            # HOVER TOOLTIP SET TO "Submit"
-            submit_signup = st.button(
-                "🚀 Verify & Create Account",
-                type="primary",
-                disabled=signup_button_disabled,
-                help="Submit"
-            )
+                submit_signup = st.form_submit_button("🚀 Verify & Create Account", type="primary", help="Press Enter or Click to Submit")
 
             if submit_signup:
-                if not validate_email_format(email_clean):
+                email_clean = check_email.lower().strip()
+                phone_clean = re.sub(r'\D', '', check_phone)
+                extracted_code = country_info["code"]
+                formatted_phone_key = f"+{extracted_code}_{phone_clean}"
+
+                if not email_clean or not password or not biz_name or not phone_clean or not captcha_input:
+                    st.warning("⚠️ Please fill in all required fields (*).")
+                elif not validate_email_format(email_clean):
                     st.error("🚨 Invalid Email Address format!")
+                elif db.collection('users').document(email_clean).get().exists:
+                    st.error("🚨 This Email is already registered!")
+                elif db.collection('phone_numbers').document(formatted_phone_key).get().exists:
+                    st.error("🚨 This Phone Number is already registered!")
                 else:
                     is_pw_strong, pw_msg = validate_password_strength(password)
                     if not is_pw_strong:
                         st.error(f"🚨 Weak Password! {pw_msg}")
                     elif len(biz_name.strip()) < 3 or biz_name.strip().isnumeric():
                         st.error("🚨 Please enter a valid Business Name (at least 3 characters).")
-                    elif not v_cap.isnumeric() or int(v_cap) != s_ans:
+                    elif not str(captcha_input).strip().isnumeric() or int(captcha_input) != s_ans:
                         refresh_locked_captcha("signup")
                         st.error("🚨 Incorrect Captcha answer! A new problem has been generated.")
                     else:
@@ -468,8 +401,8 @@ if not st.session_state['logged_in']:
                             final_username = auto_sugs[0] if auto_sugs else "biz_ledger_account"
 
                         logo_data_str = logo_file.getvalue().hex() if logo_file is not None else ""
-
                         generated_code = str(random.randint(100000, 999999))
+
                         st.session_state['pending_user_data'] = {
                             "username": final_username,
                             "email": email_clean,
@@ -563,7 +496,7 @@ else:
             "timestamp": get_current_time().strftime("%Y-%m-%d %H:%M:%S")
         }
 
-    tab_dashboard, tab_customers = st.tabs(["📊 Main Ledger Dashboard", "👥 Customer Directory & Statements"])
+    tab_dashboard, tab_accounts, tab_customers = st.tabs(["📊 Main Ledger Dashboard", "📚 Chart of Accounts", "👥 Customer Directory & Statements"])
 
     def load_data():
         docs = db.collection('transactions').where('business_id', '==', st.session_state['business_id']).stream()
@@ -706,6 +639,17 @@ else:
             )
         else:
             st.info("No transactions recorded yet. Add your first transaction from the sidebar!")
+
+    with tab_accounts:
+        st.subheader("📚 Chart of Accounts")
+        st.write("Overview of automatically mapped Income, Expense, and Asset accounts.")
+        
+        if not df.empty:
+            cat_summary = df.groupby(['category', 'type'])['amount'].sum().reset_index()
+            cat_summary.columns = ['Account Name / Category', 'Account Type', 'Total Balance (Rs.)']
+            st.dataframe(cat_summary, width='stretch')
+        else:
+            st.info("Chart of accounts will generate automatically as soon as entries are recorded.")
 
     with tab_customers:
         st.subheader("👥 Repeated Customers / Merchants Directory")
