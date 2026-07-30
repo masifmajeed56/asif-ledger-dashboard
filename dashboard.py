@@ -5,15 +5,23 @@ import re
 import io
 from datetime import datetime
 from google.cloud import firestore
+from google.oauth2 import service_account
 
 # Page Setup
 st.set_page_config(page_title="Asif Ledger Solutions - Financial Dashboard", layout="wide")
 
-# Database Connection
+# Database Connection (Supports Streamlit Cloud Secrets & Local C: Drive)
 @st.cache_resource
 def get_db():
-    key_path = r"C:\projects\serviceAccountKey.json"
-    return firestore.Client.from_service_account_json(key_path)
+    if "FIREBASE_KEY" in st.secrets:
+        # Streamlit Cloud Se Secrets Read Karega
+        key_dict = json.loads(st.secrets["FIREBASE_KEY"])
+        creds = service_account.Credentials.from_service_account_info(key_dict)
+        return firestore.Client(credentials=creds, project=key_dict["project_id"])
+    else:
+        # Local Computer (C: Drive) Se Read Karega
+        key_path = r"C:\projects\serviceAccountKey.json"
+        return firestore.Client.from_service_account_json(key_path)
 
 db = get_db()
 
@@ -74,7 +82,7 @@ if st.sidebar.button("Process & Save Transaction"):
     else:
         st.sidebar.warning("Please enter an SMS first.")
 
-# Fetch Data (FIXED TIMEZONE & MIXED INPUT CONVERSION)
+# Fetch Data
 def load_data():
     docs = db.collection('transactions').stream()
     data = []
@@ -85,9 +93,7 @@ def load_data():
         data.append(d)
     if data:
         df_loaded = pd.DataFrame(data)
-        # Convert all timestamps to UTC first to normalize mixed timezones
         df_loaded['timestamp'] = pd.to_datetime(df_loaded['timestamp'], errors='coerce', utc=True)
-        # Convert timezone-naive datetime for clean display & date picking
         df_loaded['timestamp'] = df_loaded['timestamp'].dt.tz_localize(None)
         df_loaded['timestamp'] = df_loaded['timestamp'].fillna(pd.Timestamp.now())
         return df_loaded
@@ -100,14 +106,10 @@ if not df.empty:
     st.sidebar.divider()
     st.sidebar.header("🔍 Filters & Date Range")
 
-    # Category Filter
     all_categories = ["All"] + list(df['category'].dropna().unique())
     selected_category = st.sidebar.selectbox("Filter by Category:", all_categories)
-
-    # Type Filter
     selected_type = st.sidebar.radio("Transaction Type:", ["All", "Debit (Expense)", "Credit (Income)"])
 
-    # Date Range Selection
     min_date = df['timestamp'].min().date()
     max_date = df['timestamp'].max().date()
 
@@ -118,10 +120,8 @@ if not df.empty:
         max_value=max_date
     )
 
-    # Apply Filters
     filtered_df = df.copy()
 
-    # Filter by Date
     if isinstance(date_range, tuple) and len(date_range) == 2:
         start_date, end_date = date_range
         filtered_df = filtered_df[
@@ -129,11 +129,9 @@ if not df.empty:
             (filtered_df['timestamp'].dt.date <= end_date)
         ]
 
-    # Filter by Category
     if selected_category != "All":
         filtered_df = filtered_df[filtered_df['category'] == selected_category]
 
-    # Filter by Type
     if selected_type == "Debit (Expense)":
         filtered_df = filtered_df[filtered_df['type'] == 'Debit']
     elif selected_type == "Credit (Income)":
