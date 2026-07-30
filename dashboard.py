@@ -87,10 +87,16 @@ if 'reactivate_prompt' not in st.session_state:
 if 'pending_login_data' not in st.session_state:
     st.session_state['pending_login_data'] = {}
 
-# HIGH SPECIFICITY FORCEFUL CSS OVERRIDES
+# HIGH SPECIFICITY FORCEFUL CSS OVERRIDES (TAB ICON ENLARGEMENT & BLUE HOVERS)
 st.markdown("""
 <style>
-    /* 1. AGGRESSIVE TAB HOVER OVERRIDE (FORCE BLUE COLOR & COMMENT EFFECT) */
+    /* MAKE ICON TABS LARGER AND CLEANER */
+    div[data-baseweb="tab-list"] button[role="tab"] {
+        font-size: 22px !important;
+        padding: 8px 24px !important;
+    }
+
+    /* AGGRESSIVE TAB HOVER OVERRIDE (FORCE BLUE COLOR) */
     div[data-baseweb="tab-list"] button[role="tab"]:hover,
     div[data-baseweb="tab-list"] button[role="tab"]:hover *,
     button[data-baseweb="tab"]:hover,
@@ -99,7 +105,6 @@ st.markdown("""
     .stTabs [data-baseweb="tab"]:hover * {
         color: #0000FF !important;
         fill: #0000FF !important;
-        font-weight: 700 !important;
     }
 
     /* TAB HOVER HIGHLIGHT / INDICATOR BAR FORCE BLUE */
@@ -117,29 +122,12 @@ st.markdown("""
         box-shadow: 0px 4px 10px rgba(0,0,0,0.3) !important;
     }
 
-    /* 2. CUSTOMER / PARTY NAME FIELD REAL-TIME AUTO CAPITALIZATION */
+    /* CUSTOMER / PARTY NAME FIELD REAL-TIME AUTO CAPITALIZATION */
     input[aria-label*="Customer / Party Name"] {
         text-transform: capitalize !important;
     }
 
-    /* 3. STRICT LINK HOVER BLUE OVERRIDE */
-    a, a:link, a:visited, 
-    .stMarkdown a, 
-    div[data-testid="stMarkdownContainer"] a {
-        color: #003366 !important;
-        text-decoration: none !important;
-        transition: color 0.2s ease-in-out !important;
-    }
-    
-    a:hover, a:focus, a:active, 
-    .stMarkdown a:hover, 
-    div[data-testid="stMarkdownContainer"] a:hover {
-        color: #0000FF !important;
-        text-decoration: underline !important;
-        font-weight: bold !important;
-    }
-
-    /* 4. BUTTON STYLING OVERRIDES */
+    /* BUTTON STYLING OVERRIDES */
     button[kind="primary"],
     div[data-testid="stFormSubmitButton"] > button {
         background-color: #003366 !important;
@@ -774,7 +762,6 @@ else:
                 return category
         return "General Expense"
 
-    # STRICT PARSER: RUPEES VS DATE SAFEGUARD & MERCHANT NAME FIX WITH TITLE CASE
     def parse_sms_logic(sms_text, custom_merchant_name=""):
         amount_match = re.search(r'(?:Rs\.?|INR|PKR|\$)\s*([\d,]+(?:\.\d{1,2})?)', sms_text, re.IGNORECASE)
         
@@ -794,7 +781,6 @@ else:
         if not merchant:
             merchant = "Direct Customer / Merchant"
 
-        # AUTOMATIC TITLE CASE CAPITALIZATION FOR EVERY WORD
         merchant = merchant.title()
 
         method_match = re.search(r'(?:via|using|through)\s+([A-Za-z0-9\s]+?)(?=\s+(?:on|dated|ref|\.|$))', sms_text, re.IGNORECASE)
@@ -818,7 +804,6 @@ else:
 
     st.sidebar.header("📩 Add Live Transaction / SMS")
     with st.sidebar.form("add_entry_form"):
-        # CUSTOMER / PARTY NAME FIELD WITH AUTO CAPITALIZATION
         merchant_input = st.text_input(
             "Customer / Party Name *", 
             placeholder="e.g. Ali Traders, Kashif",
@@ -834,7 +819,6 @@ else:
 
     if submit_entry:
         if user_sms.strip():
-            # CAPITALIZING CUSTOMER NAME (TITLE CASE)
             formatted_merchant = merchant_input.strip().title()
             
             entry_timestamp = datetime.combine(custom_date, custom_time).strftime("%Y-%m-%d %H:%M:%S")
@@ -867,23 +851,24 @@ else:
 
     df = load_data()
 
-    # DYNAMIC TABS FOR OWNER VS ACCOUNTANT
+    # ---------------- DYNAMIC ICON TABS WITH HOVER TOOLTIPS ----------------
     if role == "Owner":
         tab_dashboard, tab_accounts, tab_customers, tab_team = st.tabs([
-            "📊 Main Ledger Dashboard", 
-            "📚 Chart of Accounts", 
-            "👥 Customer Directory & Statements",
-            "🛡️ Team Management (RBAC)"
+            "📊", 
+            "📚", 
+            "👥",
+            "🛡️"
         ])
     else:
         tab_dashboard, tab_accounts, tab_customers = st.tabs([
-            "📊 Main Ledger Dashboard", 
-            "📚 Chart of Accounts", 
-            "👥 Customer Directory & Statements"
+            "📊", 
+            "📚", 
+            "👥"
         ])
 
     # 1. MAIN LEDGER DASHBOARD TAB
     with tab_dashboard:
+        st.subheader("📊 Main Ledger Dashboard")
         if not df.empty:
             st.sidebar.divider()
             st.sidebar.header("🔍 Filters & Options")
@@ -912,7 +897,6 @@ else:
 
             st.divider()
             
-            # TRANSACTIONS GRAPH IN DIFFERENT COLORS
             st.subheader("📈 Transactions Summary Graph")
             chart_data = filtered_df.groupby(['type'])['amount'].sum().reset_index()
             if not chart_data.empty:
@@ -958,7 +942,7 @@ else:
     # 4. TEAM MANAGEMENT TAB (ONLY OWNER ACCESS)
     if role == "Owner":
         with tab_team:
-            st.subheader("👥 Accountant Team Management (Max 2 Allowed)")
+            st.subheader("🛡️ Accountant Team Management (Max 2 Allowed)")
             st.info("Assign Accountants restricted access to add/view ledger entries without seeing private account options.")
             
             acc_docs = list(db.collection('accountants').where('owner_email', '==', st.session_state['user_email']).stream())
