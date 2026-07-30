@@ -49,7 +49,7 @@ if 'reactivate_prompt' not in st.session_state:
 if 'pending_login_data' not in st.session_state:
     st.session_state['pending_login_data'] = {}
 
-# FIXED NATIVE CSS OVERRIDES
+# NATIVE CSS OVERRIDES
 st.markdown("""
 <style>
     /* 1. PRIMARY BUTTONS (SELECTED / ACTIVE = BLUE) */
@@ -63,7 +63,7 @@ st.markdown("""
     }
     button[kind="primary"]:hover,
     div[data-testid="stFormSubmitButton"] > button:hover {
-        background-color: #002244 !important; /* Darker Blue Hover */
+        background-color: #002244 !important;
         color: #ffffff !important;
         border-color: #001122 !important;
         cursor: pointer !important;
@@ -104,7 +104,7 @@ def get_db():
 
 db = get_db()
 
-# Country Codes Data with strict formatting limits
+# Country Codes Data
 COUNTRY_DATA = {
     "🇵🇰 +92": {"code": "92", "placeholder": "300 1234567", "length": 10, "format_example": "+92 300 1234567"},
     "🇦🇪 +971": {"code": "971", "placeholder": "50 1234567", "length": 9, "format_example": "+971 50 1234567"},
@@ -215,7 +215,6 @@ def show_reactivation_dialog():
     st.write("### **Kya aap apna account dobara rakhna chahte hain?**")
     
     col_r1, col_r2 = st.columns(2)
-    
     r_left_type = "primary" if st.session_state['reactivate_selected_btn'] == 'left' else "secondary"
     r_right_type = "primary" if st.session_state['reactivate_selected_btn'] == 'right' else "secondary"
 
@@ -256,7 +255,6 @@ def show_reactivation_dialog():
             st.session_state['active_window'] = "Signup Window"
             st.rerun()
 
-# ------------------ DELETE ACCOUNT DIALOG ------------------
 @st.dialog("🗑️ Permanently Delete Account")
 def show_delete_account_dialog():
     user_data = st.session_state['business_details']
@@ -267,7 +265,6 @@ def show_delete_account_dialog():
         st.write("")
         
         col_d1, col_d2 = st.columns(2)
-        
         left_type = "primary" if st.session_state['del_selected_btn'] == 'left' else "secondary"
         right_type = "primary" if st.session_state['del_selected_btn'] == 'right' else "secondary"
 
@@ -287,14 +284,12 @@ def show_delete_account_dialog():
     elif st.session_state['del_step'] == 2:
         st.subheader("🔐 Verify Account Ownership")
         st.write("Please enter your account details and password to confirm deletion request:")
-        
         dn1, dn2, dans = get_locked_captcha("delete_acc")
         
         with st.form("delete_verify_form"):
             del_id = st.text_input("Enter Email, Username, or Phone Number *", value=st.session_state['user_email'])
             del_password = st.text_input("Enter Account Password *", type="password")
             del_captcha = st.text_input(f"Question: What is {dn1} + {dn2} ? *")
-            
             submit_del_verify = st.form_submit_button("Submit", use_container_width=True)
 
         if submit_del_verify:
@@ -351,7 +346,6 @@ if not st.session_state['logged_in']:
     st.caption("Multi-Tenant Cloud Accounting & Ledger Platform")
     
     col_w1, col_w2, _ = st.columns([1, 1, 2])
-    
     login_btn_type = "primary" if st.session_state['active_window'] == "Login Window" else "secondary"
     signup_btn_type = "primary" if st.session_state['active_window'] == "Signup Window" else "secondary"
 
@@ -370,6 +364,7 @@ if not st.session_state['logged_in']:
     if st.session_state['reactivate_prompt']:
         show_reactivation_dialog()
 
+    # ---------------- LOGIN WINDOW ----------------
     if st.session_state['active_window'] == "Login Window":
         st.markdown("### 🔑 Client Account Login")
         
@@ -384,19 +379,49 @@ if not st.session_state['logged_in']:
             preset_login = saved_dict[selected_acc_key]["login"]
             preset_password = saved_dict[selected_acc_key]["password"]
 
+        # REAL-TIME INSTANT CHECK FOR NEW UNREGISTERED ACCOUNTS IN LOGIN
+        login_id_live = st.text_input("Username (@handle), Email, or Phone Number", value=preset_login, placeholder="e.g. user_handle, name@email.com, or +923001234567", key="login_id_live_key")
+        
+        is_login_disabled = False
+        login_clean_check = login_id_live.strip()
+
+        if login_clean_check:
+            account_found = False
+            if "@" in login_clean_check:
+                if db.collection('users').document(login_clean_check.lower()).get().exists:
+                    account_found = True
+            else:
+                digits = re.sub(r'\D', '', login_clean_check)
+                if len(digits) >= 7:
+                    phone_docs = db.collection('phone_numbers').stream()
+                    for p_doc in phone_docs:
+                        if digits in re.sub(r'\D', '', p_doc.id):
+                            account_found = True
+                            break
+                if not account_found:
+                    if db.collection('usernames').document(login_clean_check.lower()).get().exists:
+                        account_found = True
+
+            if not account_found:
+                is_login_disabled = True
+                st.error("🚨 ACCOUNT NOT FOUND! No registered account matches this entry.")
+                st.info("👉 Since this account does not exist, please go to the Signup Window to create a new one.")
+                if st.button("📝 Click Here to Go to Signup Window", type="primary", use_container_width=True):
+                    st.session_state['active_window'] = "Signup Window"
+                    st.rerun()
+
         l_n1, l_n2, l_ans = get_locked_captcha("login")
 
         with st.form("login_form", clear_on_submit=False):
-            login_id = st.text_input("Username (@handle), Email, or Phone Number", value=preset_login, placeholder="e.g. user_handle, name@email.com, or +923001234567")
-            login_password = st.text_input("Password", type="password", value=preset_password)
+            login_password = st.text_input("Password", type="password", value=preset_password, disabled=is_login_disabled)
 
             st.markdown("#### 🤖 Human Verification")
-            login_captcha = st.text_input(f"Question: What is {l_n1} + {l_n2} ? *", placeholder="Enter sum answer")
+            login_captcha = st.text_input(f"Question: What is {l_n1} + {l_n2} ? *", placeholder="Enter sum answer", disabled=is_login_disabled)
 
-            submit_login = st.form_submit_button("Submit")
+            submit_login = st.form_submit_button("Submit", disabled=is_login_disabled)
 
-        if submit_login:
-            val_id = str(login_id).strip()
+        if submit_login and not is_login_disabled:
+            val_id = str(login_id_live).strip()
             val_pw = str(login_password).strip()
             val_cap = str(login_captcha).strip()
 
@@ -469,6 +494,7 @@ if not st.session_state['logged_in']:
                 else:
                     show_not_found_popup()
 
+    # ---------------- SIGNUP WINDOW ----------------
     elif st.session_state['active_window'] == "Signup Window":
         if st.session_state['otp_step']:
             st.markdown("### 🔐 Verify OTP Security Code")
@@ -508,17 +534,10 @@ if not st.session_state['logged_in']:
         else:
             st.markdown("### 📝 Create New Business Account")
             
-            # --- REAL-TIME TAB / OUT-OF-FORM LIVE VALIDATIONS ---
+            # INSTANT REAL-TIME SIGNUP INPUT CHECKS
             check_email = st.text_input("User Email Address *", placeholder="name@domain.com", key="live_signup_email")
             email_clean = check_email.lower().strip()
             
-            # INSTANT TAB EMAIL CHECK & ALERT POPUP
-            if email_clean:
-                if not validate_email_format(email_clean):
-                    st.error("🚨 Invalid Email Address format!")
-                elif db.collection('users').document(email_clean).get().exists:
-                    st.error("🚨 THIS EMAIL IS ALREADY REGISTERED! Please try logging in or use another email.")
-
             st.markdown("#### 📞 Contact Phone Number *")
             p_col1, p_col2 = st.columns([1.2, 2.8])
             with p_col1:
@@ -527,7 +546,6 @@ if not st.session_state['logged_in']:
             country_info = COUNTRY_DATA[selected_country]
             
             with p_col2:
-                # Dynamic Key ensures Placeholder & Format rules instantly refresh on country change
                 check_phone = st.text_input(
                     f"Phone Number (Max {country_info['length']} digits)",
                     placeholder=country_info["placeholder"],
@@ -538,42 +556,50 @@ if not st.session_state['logged_in']:
             extracted_code = country_info["code"]
             formatted_phone_key = f"+{extracted_code}_{phone_clean}"
 
-            # INSTANT TAB PHONE CHECK & ALERT POPUP
-            if phone_clean:
-                if len(phone_clean) != country_info['length']:
-                    st.warning(f"⚠️ Phone number for {selected_country} must be exactly {country_info['length']} digits. Format: {country_info['format_example']}")
-                elif db.collection('phone_numbers').document(formatted_phone_key).get().exists:
-                    st.error("🚨 THIS PHONE NUMBER IS ALREADY REGISTERED! Please use a different number.")
+            # CHECK FOR DUPLICATES AND CONTROL FORM DISABLE STATE
+            is_signup_disabled = False
+            
+            if email_clean and db.collection('users').document(email_clean).get().exists:
+                is_signup_disabled = True
+                st.error("🚨 THIS EMAIL IS ALREADY REGISTERED!")
+                st.info("👉 An account with this email already exists. Click below to go to the Login Window.")
+                if st.button("🔑 Click Here to Go to Login Window", type="primary", use_container_width=True):
+                    st.session_state['active_window'] = "Login Window"
+                    st.rerun()
+
+            elif phone_clean and len(phone_clean) == country_info['length'] and db.collection('phone_numbers').document(formatted_phone_key).get().exists:
+                is_signup_disabled = True
+                st.error("🚨 THIS PHONE NUMBER IS ALREADY REGISTERED!")
+                st.info("👉 An account with this phone number already exists. Click below to go to the Login Window.")
+                if st.button("🔑 Click Here to Go to Login Window", type="primary", use_container_width=True):
+                    st.session_state['active_window'] = "Login Window"
+                    st.rerun()
 
             s_n1, s_n2, s_ans = get_locked_captcha("signup")
 
             with st.form("signup_form"):
                 grid_c1, grid_c2 = st.columns(2)
                 with grid_c1:
-                    password = st.text_input("Unique Password *", type="password", placeholder="8+ chars, Uppercase, Number & Symbol")
-                    biz_name = st.text_input("Business Name *", placeholder="e.g. Ali Traders, Bismillah Pharmacy")
+                    password = st.text_input("Unique Password *", type="password", placeholder="8+ chars, Uppercase, Number & Symbol", disabled=is_signup_disabled)
+                    biz_name = st.text_input("Business Name *", placeholder="e.g. Ali Traders, Bismillah Pharmacy", disabled=is_signup_disabled)
 
                 with grid_c2:
-                    username_input = st.text_input("Choose Unique Username / Handle (Optional)", placeholder="Auto-generated if left empty")
-                    biz_type = st.selectbox("Business Category", ["Grocery Store", "Medical Store / Pharmacy", "General Store", "Services / Consulting", "Wholesale", "Other"])
+                    username_input = st.text_input("Choose Unique Username / Handle (Optional)", placeholder="Auto-generated if left empty", disabled=is_signup_disabled)
+                    biz_type = st.selectbox("Business Category", ["Grocery Store", "Medical Store / Pharmacy", "General Store", "Services / Consulting", "Wholesale", "Other"], disabled=is_signup_disabled)
 
                 st.markdown("#### 🤖 Human Verification")
-                captcha_input = st.text_input(f"Question: What is {s_n1} + {s_n2} ? *", placeholder="Enter sum answer")
-                logo_file = st.file_uploader("Upload Business Logo (PNG / JPG)", type=["png", "jpg", "jpeg"])
+                captcha_input = st.text_input(f"Question: What is {s_n1} + {s_n2} ? *", placeholder="Enter sum answer", disabled=is_signup_disabled)
+                logo_file = st.file_uploader("Upload Business Logo (PNG / JPG)", type=["png", "jpg", "jpeg"], disabled=is_signup_disabled)
 
-                submit_signup = st.form_submit_button("Submit")
+                submit_signup = st.form_submit_button("Submit", disabled=is_signup_disabled)
 
-            if submit_signup:
+            if submit_signup and not is_signup_disabled:
                 if not email_clean or not password or not biz_name or not phone_clean or not captcha_input:
                     st.warning("⚠️ Please fill in all required fields (*).")
                 elif not validate_email_format(email_clean):
                     st.error("🚨 Invalid Email Address format!")
                 elif len(phone_clean) != country_info['length']:
                     st.error(f"🚨 Phone number must be exactly {country_info['length']} digits for {selected_country}.")
-                elif db.collection('users').document(email_clean).get().exists:
-                    st.error("🚨 This Email is already registered!")
-                elif db.collection('phone_numbers').document(formatted_phone_key).get().exists:
-                    st.error("🚨 This Phone Number is already registered!")
                 else:
                     is_pw_strong, pw_msg = validate_password_strength(password)
                     if not is_pw_strong:
