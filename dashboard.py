@@ -14,9 +14,9 @@ from google.oauth2 import service_account
 # Page Setup
 st.set_page_config(page_title="Asif Ledger Solutions", layout="wide")
 
-# Session State Initializations for Button Toggles
+# Session State Initializations
 if 'del_selected_btn' not in st.session_state:
-    st.session_state['del_selected_btn'] = 'left'  # Default 'left' is selected (YES, I AM SURE)
+    st.session_state['del_selected_btn'] = 'left'  # Always Default Left Selected
 
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
@@ -45,10 +45,10 @@ if 'reactivate_prompt' not in st.session_state:
 if 'pending_login_data' not in st.session_state:
     st.session_state['pending_login_data'] = {}
 
-# Custom CSS Rules
+# Custom CSS: Hover Effects, Office Blue Override & Active/Inactive Toggles
 st.markdown("""
 <style>
-    /* Global Submit / Primary Blue Buttons Override */
+    /* 1. Global Submit & Primary Blue Buttons Override */
     button[kind="primary"],
     .stButton > button[data-testid="baseButton-primary"],
     div.stButton > button[kind="primary"],
@@ -59,39 +59,51 @@ st.markdown("""
         border: 1px solid #002244 !important;
         background-image: none !important;
         font-weight: bold !important;
+        transition: all 0.3s ease-in-out !important;
     }
 
+    /* Hover Effect: Changes to Office Blue (#002244) */
     button[kind="primary"]:hover,
-    .blue-btn button:hover {
-        background-color: #0056b3 !important;
+    .stButton > button[data-testid="baseButton-primary"]:hover,
+    .blue-btn button:hover,
+    div.blue-btn > button:hover {
+        background-color: #002244 !important; /* Office Blue Hover */
         color: #ffffff !important;
+        border-color: #001122 !important;
         cursor: pointer !important;
+        box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2) !important;
     }
 
-    /* Selected Button Style (Blue) */
+    /* 2. Selected Left Button (Blue + Office Blue Hover) */
     .btn-blue button, div.btn-blue > button {
         background-color: #003366 !important;
         color: #ffffff !important;
         border: 1px solid #002244 !important;
         font-weight: bold !important;
+        transition: all 0.3s ease-in-out !important;
+    }
+    .btn-blue button:hover, div.btn-blue > button:hover {
+        background-color: #002244 !important; /* Office Blue Hover Comment/Effect */
+        color: #ffffff !important;
+        cursor: pointer !important;
     }
 
-    /* Unselected Button Style (White) */
+    /* 3. Unselected Right Button (White + Light Blue Hover) */
     .btn-white button, div.btn-white > button {
         background-color: #ffffff !important;
         color: #003366 !important;
         border: 1px solid #003366 !important;
         font-weight: bold !important;
+        transition: all 0.3s ease-in-out !important;
+    }
+    .btn-white button:hover, div.btn-white > button:hover {
+        background-color: #e6f0fa !important;
+        color: #002244 !important;
+        border-color: #002244 !important;
+        cursor: pointer !important;
     }
 
-    /* Secondary Buttons Styling */
-    button[kind="secondary"],
-    .stButton > button[data-testid="baseButton-secondary"] {
-        background-color: #ffffff !important;
-        color: #333333 !important;
-        border: 1px solid #cccccc !important;
-    }
-
+    /* Links Styling */
     a {
         color: #003366 !important;
         text-decoration: none !important;
@@ -230,7 +242,7 @@ def show_reactivation_dialog():
     
     col_r1, col_r2 = st.columns(2)
     with col_r1:
-        st.markdown('<div class="blue-btn">', unsafe_allow_html=True)
+        st.markdown('<div class="btn-blue">', unsafe_allow_html=True)
         if st.button("Submit", key="btn_reactivate_keep", use_container_width=True):
             target_email = st.session_state['pending_login_data']['email']
             user_data = st.session_state['pending_login_data']['user_data']
@@ -260,18 +272,19 @@ def show_reactivation_dialog():
         st.markdown('</div>', unsafe_allow_html=True)
 
     with col_r2:
+        st.markdown('<div class="btn-white">', unsafe_allow_html=True)
         if st.button("Cancel", key="btn_reactivate_cancel", use_container_width=True):
             st.session_state['reactivate_prompt'] = False
             st.session_state['pending_login_data'] = {}
             st.session_state['active_window'] = "Signup Window"
             st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
-# ------------------ DELETE ACCOUNT DIALOG WITH TOGGLE & ALIGNED BUTTONS ------------------
+# ------------------ DELETE ACCOUNT DIALOG ------------------
 @st.dialog("🗑️ Permanently Delete Account")
 def show_delete_account_dialog():
     user_data = st.session_state['business_details']
     
-    # Step 1: Aligned Buttons & Selection Toggle (Left Blue / Right White & Vice Versa)
     if st.session_state['del_step'] == 1:
         st.error("⚠️ WARNING: THIS ACTION CANNOT BE UNDONE!")
         st.write("Are you sure you want to request permanent deletion of your business account and all associated ledger entries?")
@@ -279,6 +292,7 @@ def show_delete_account_dialog():
         
         col_d1, col_d2 = st.columns(2)
         
+        # Left Selected (Blue), Right Unselected (White)
         left_class = "btn-blue" if st.session_state['del_selected_btn'] == 'left' else "btn-white"
         right_class = "btn-blue" if st.session_state['del_selected_btn'] == 'right' else "btn-white"
 
@@ -299,7 +313,6 @@ def show_delete_account_dialog():
                 st.rerun()
             st.markdown('</div>', unsafe_allow_html=True)
 
-    # Step 2: Form Verification
     elif st.session_state['del_step'] == 2:
         st.subheader("🔐 Verify Account Ownership")
         st.write("Please enter your account details and password to confirm deletion request:")
@@ -329,7 +342,6 @@ def show_delete_account_dialog():
                 else:
                     st.error("🚨 Incorrect Password! Deletion aborted.")
 
-    # Step 3: Excel File Backup & Final Submit
     elif st.session_state['del_step'] == 3:
         st.warning("⏰ Account Deletion Scheduled in 7 Days!")
         st.write("Aapka account **7 Days** ke baad database se **permanently delete** kar diya jayega.")
@@ -366,7 +378,7 @@ def show_delete_account_dialog():
 if st.session_state.get('show_delete_dialog', False):
     show_delete_account_dialog()
 
-# ------------------ MAIN NAVIGATION & LOGIN / SIGNUP SCREEN ------------------
+# ------------------ MAIN SCREEN: LOGIN & SIGNUP ------------------
 if not st.session_state['logged_in']:
     st.title("💼 Asif Ledger Solutions")
     st.caption("Multi-Tenant Cloud Accounting & Ledger Platform")
@@ -374,16 +386,16 @@ if not st.session_state['logged_in']:
     col_w1, col_w2, _ = st.columns([1, 1, 2])
     with col_w1:
         is_login = st.session_state['active_window'] == "Login Window"
-        st.markdown('<div class="blue-btn">' if is_login else '<div>', unsafe_allow_html=True)
-        if st.button("🔑 Login", use_container_width=True, type="primary" if is_login else "secondary"):
+        st.markdown('<div class="btn-blue">' if is_login else '<div class="btn-white">', unsafe_allow_html=True)
+        if st.button("🔑 Login", use_container_width=True):
             st.session_state['active_window'] = "Login Window"
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
 
     with col_w2:
         is_signup = st.session_state['active_window'] == "Signup Window"
-        st.markdown('<div class="blue-btn">' if is_signup else '<div>', unsafe_allow_html=True)
-        if st.button("📝 Signup", use_container_width=True, type="primary" if is_signup else "secondary"):
+        st.markdown('<div class="btn-blue">' if is_signup else '<div class="btn-white">', unsafe_allow_html=True)
+        if st.button("📝 Signup", use_container_width=True):
             st.session_state['active_window'] = "Signup Window"
             st.rerun()
         st.markdown('</div>', unsafe_allow_html=True)
@@ -393,7 +405,6 @@ if not st.session_state['logged_in']:
     if st.session_state['reactivate_prompt']:
         show_reactivation_dialog()
 
-    # WINDOW 1: LOGIN
     if st.session_state['active_window'] == "Login Window":
         st.markdown("### 🔑 Client Account Login")
         
@@ -456,7 +467,6 @@ if not st.session_state['logged_in']:
                     if user_doc.exists:
                         user_data = user_doc.to_dict()
                         if user_data['password'] == make_hash(val_pw):
-                            
                             if user_data.get("status") == "deletion_requested":
                                 req_time_str = user_data.get("deletion_requested_at")
                                 if req_time_str:
@@ -496,7 +506,6 @@ if not st.session_state['logged_in']:
                 else:
                     show_not_found_popup()
 
-    # WINDOW 2: SIGNUP
     elif st.session_state['active_window'] == "Signup Window":
         if st.session_state['otp_step']:
             st.markdown("### 🔐 Verify OTP Security Code")
@@ -619,7 +628,7 @@ if not st.session_state['logged_in']:
                         refresh_locked_captcha("signup")
                         st.rerun()
 
-# ------------------ DASHBOARD VIEW ------------------
+# ------------------ DASHBOARD VIEW (ENTRIES FORM RESTORED) ------------------
 else:
     biz_info = st.session_state['business_details']
     
@@ -651,12 +660,159 @@ else:
 
     st.divider()
 
-    # Bottom Delete User Section Trigger
+    # Smart Categorization Engine
+    CATEGORIES = {
+        "Fuel & Automobile": ["shell", "pso", "total", "petrol", "fuel", "cng"],
+        "Utilities": ["k-electric", "lesco", "fesco", "ptcl", "stormfiber", "sngpl", "bill"],
+        "Groceries & Food": ["metro", "carrefour", "chaseup", "kfc", "mcdonalds", "foodpanda"],
+        "Software & Services": ["google", "netflix", "openai", "aws", "github"],
+        "Bank & Transfer Fees": ["fee", "tax", "charge", "atm fee"]
+    }
+
+    def auto_assign_category(merchant_name, sms_text):
+        text = (merchant_name + " " + sms_text).lower()
+        for category, keywords in CATEGORIES.items():
+            if any(keyword in text for keyword in keywords):
+                return category
+        return "General Expense"
+
+    def parse_sms_logic(sms_text):
+        amount_match = re.search(r'(?:Rs\.?|INR|PKR|\$)\s*([\d,]+(?:\.\d{1,2})?)', sms_text, re.IGNORECASE)
+        amount = float(amount_match.group(1).replace(',', '')) if amount_match else 0.0
+
+        merchant = "General Merchant"
+        merchant_match = re.search(r'(?:to|at|paid to|sent to|received from|from|transfer from)\s+([A-Za-z0-9\s&]+?)(?=\s+(?:via|on|from|ref|dated|code|\.|$))', sms_text, re.IGNORECASE)
+        if merchant_match:
+            merchant = merchant_match.group(1).strip()
+
+        method_match = re.search(r'(?:via|using|through)\s+([A-Za-z0-9\s]+?)(?=\s+(?:on|dated|ref|\.|$))', sms_text, re.IGNORECASE)
+        payment_method = method_match.group(1).strip() if method_match else "Direct Transfer"
+
+        is_debit = any(word in sms_text.lower() for word in ["paid", "sent", "debited", "spent", "withdrawn"])
+        cat = auto_assign_category(merchant, sms_text) if is_debit else "Income"
+
+        return {
+            "business_id": st.session_state['business_id'],
+            "raw_sms": sms_text,
+            "amount": amount,
+            "merchant": merchant,
+            "payment_method": payment_method,
+            "type": "Debit" if is_debit else "Credit",
+            "category": cat,
+            "status": "processed",
+            "timestamp": get_current_time().strftime("%Y-%m-%d %H:%M:%S")
+        }
+
+    # RESTORED: SIDEBAR NEW LEDGER ENTRY FORM
+    st.sidebar.header("📩 Add Live Transaction / SMS")
+    with st.sidebar.form("add_entry_form"):
+        user_sms = st.text_area("Paste SMS Text Here:", placeholder="e.g. Received Rs 5,000 from Ali Traders via EasyPaisa.")
+        current_now = get_current_time()
+        custom_date = st.date_input("Transaction Date:", value=current_now.date())
+        custom_time = st.time_input("Transaction Time:", value=current_now.time())
+        
+        st.markdown('<div class="blue-btn">', unsafe_allow_html=True)
+        submit_entry = st.form_submit_button("Submit", type="primary")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    if submit_entry:
+        if user_sms.strip():
+            entry_timestamp = datetime.combine(custom_date, custom_time).strftime("%Y-%m-%d %H:%M:%S")
+            parsed_record = parse_sms_logic(user_sms)
+            parsed_record["timestamp"] = entry_timestamp
+            
+            db.collection('transactions').add(parsed_record)
+            st.sidebar.success("✅ Transaction Saved Successfully!")
+            st.rerun()
+        else:
+            st.sidebar.warning("⚠️ Please enter SMS or transaction details.")
+
+    # Main Ledger Dashboard & Analytics
+    def load_data():
+        docs = db.collection('transactions').where('business_id', '==', st.session_state['business_id']).stream()
+        data = []
+        for doc in docs:
+            d = doc.to_dict()
+            if "timestamp" not in d or not d["timestamp"]:
+                d["timestamp"] = get_current_time().strftime("%Y-%m-%d %H:%M:%S")
+            data.append(d)
+        if data:
+            df_loaded = pd.DataFrame(data)
+            df_loaded['timestamp'] = pd.to_datetime(df_loaded['timestamp'], errors='coerce', utc=True)
+            df_loaded['timestamp'] = df_loaded['timestamp'].dt.tz_localize(None)
+            df_loaded['timestamp'] = df_loaded['timestamp'].fillna(pd.Timestamp.now())
+            return df_loaded
+        return pd.DataFrame()
+
+    df = load_data()
+
+    tab_dashboard, tab_accounts, tab_customers = st.tabs(["📊 Main Ledger Dashboard", "📚 Chart of Accounts", "👥 Customer Directory & Statements"])
+
+    with tab_dashboard:
+        if not df.empty:
+            st.sidebar.divider()
+            st.sidebar.header("🔍 Filters & Options")
+            
+            all_categories = ["All"] + list(df['category'].dropna().unique())
+            selected_category = st.sidebar.selectbox("Filter by Category:", all_categories)
+            selected_type = st.sidebar.radio("Transaction Type:", ["All", "Debit (Expense)", "Credit (Income)"])
+
+            filtered_df = df.copy()
+            if selected_category != "All":
+                filtered_df = filtered_df[filtered_df['category'] == selected_category]
+
+            if selected_type == "Debit (Expense)":
+                filtered_df = filtered_df[filtered_df['type'] == 'Debit']
+            elif selected_type == "Credit (Income)":
+                filtered_df = filtered_df[filtered_df['type'] == 'Credit']
+
+            total_income = filtered_df[filtered_df['type'] == 'Credit']['amount'].sum()
+            total_expense = filtered_df[filtered_df['type'] == 'Debit']['amount'].sum()
+            net_balance = total_income - total_expense
+
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Selected Income", f"Rs. {total_income:,.2f}")
+            c2.metric("Selected Expenses", f"Rs. {total_expense:,.2f}")
+            c3.metric("Net Balance", f"Rs. {net_balance:,.2f}")
+
+            st.divider()
+            st.subheader("📋 Ledger Transactions Records")
+            display_df = filtered_df.copy()
+            display_df['Date & Time'] = display_df['timestamp'].dt.strftime('%Y-%m-%d %H:%M')
+            st.dataframe(
+                display_df[['Date & Time', 'amount', 'merchant', 'category', 'type', 'payment_method', 'status']],
+                width='stretch'
+            )
+        else:
+            st.info("💡 No transactions recorded yet. Use the **Add Live Transaction** form in the sidebar to add your first entry!")
+
+    with tab_accounts:
+        st.subheader("📚 Chart of Accounts")
+        if not df.empty:
+            cat_summary = df.groupby(['category', 'type'])['amount'].sum().reset_index()
+            cat_summary.columns = ['Account Category', 'Type', 'Total Balance (Rs.)']
+            st.dataframe(cat_summary, width='stretch')
+        else:
+            st.info("Chart of accounts will automatically populate when transactions are recorded.")
+
+    with tab_customers:
+        st.subheader("👥 Customer & Merchant Directory")
+        if not df.empty:
+            merchants_list = sorted(list(df['merchant'].unique()))
+            selected_merchant = st.selectbox("Select Customer / Merchant:", merchants_list)
+            if selected_merchant:
+                m_df = df[df['merchant'] == selected_merchant]
+                st.dataframe(m_df[['timestamp', 'amount', 'type', 'category', 'raw_sms']], width='stretch')
+        else:
+            st.info("Customer history will appear here once entries are recorded.")
+
+    # Bottom Delete Account Security Zone
+    st.markdown("---")
     bot_col1, bot_col2 = st.columns([3, 1])
     with bot_col1:
         st.caption("🔒 Security & Data Privacy Zone")
     with bot_col2:
-        st.markdown('<div class="blue-btn">', unsafe_allow_html=True)
+        st.markdown('<div class="btn-blue">', unsafe_allow_html=True)
         if st.button("🗑️ Delete Account", use_container_width=True):
             st.session_state['del_selected_btn'] = 'left'
             st.session_state['del_step'] = 1
