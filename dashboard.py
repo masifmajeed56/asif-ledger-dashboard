@@ -35,7 +35,6 @@ def make_hash(password):
     return hashlib.sha256(str.encode(password)).hexdigest()
 
 # ---------------- PERSISTENT SESSION VIA QUERY PARAMS ----------------
-# Restore login state on browser refresh using URL Query Params
 query_params = st.query_params
 session_email = query_params.get("user", "")
 session_role = query_params.get("role", "Owner")
@@ -88,18 +87,19 @@ if 'reactivate_prompt' not in st.session_state:
 if 'pending_login_data' not in st.session_state:
     st.session_state['pending_login_data'] = {}
 
-# NATIVE CSS OVERRIDES (INCLUDING LINK HOVER OVERRIDE TO BLUE)
+# NATIVE CSS OVERRIDES (STRICT LINK HOVER BLUE & BUTTON STYLING)
 st.markdown("""
 <style>
-    /* 1. LINK HOVER COLOR OVERRIDE TO BLUE */
-    a {
+    /* 1. FORCE PURE BLUE LINK HOVER OVERRIDE */
+    a, a:visited, a:link {
         color: #003366 !important;
         text-decoration: none !important;
         transition: color 0.2s ease-in-out !important;
     }
-    a:hover, a:focus, a:active {
-        color: #002244 !important;
+    a:hover, a:focus, a:active, p a:hover, span a:hover {
+        color: #0000FF !important; /* Pure Vibrant Blue Hover */
         text-decoration: underline !important;
+        font-weight: bold !important;
     }
 
     /* 2. PRIMARY BUTTONS */
@@ -147,7 +147,6 @@ COUNTRY_DATA = {
 }
 
 def mask_sensitive_text(text, role):
-    """Masks phone numbers and private details if user is an Accountant"""
     if role == "Owner":
         return text
     if not text:
@@ -267,7 +266,6 @@ def show_reactivation_dialog():
             st.session_state['reactivate_selected_btn'] = 'left'
             target_email = st.session_state['pending_login_data']['email']
             user_data = st.session_state['pending_login_data']['user_data']
-            val_pw = st.session_state['pending_login_data']['password']
             
             db.collection('users').document(target_email).update({
                 "status": "active",
@@ -500,7 +498,6 @@ if not st.session_state['logged_in']:
 
                 user_doc = db.collection('users').document(target_email).get()
                 
-                # Check Accountant Login if Owner not found
                 if not user_doc.exists:
                     acc_query = db.collection('accountants').where('username', '==', login_clean.lower()).stream()
                     for acc in acc_query:
@@ -751,23 +748,37 @@ else:
     }
 
     def auto_assign_category(merchant_name, sms_text):
-        text = (merchant_name + " " + sms_text).lower()
+        text = (str(merchant_name) + " " + str(sms_text)).lower()
         for category, keywords in CATEGORIES.items():
             if any(keyword in text for keyword in keywords):
                 return category
         return "General Expense"
 
-    def parse_sms_logic(sms_text):
+    # STRICT PARSER: RUPEES VS DATE SAFEGUARD & MERCHANT NAME FIX
+    def parse_sms_logic(sms_text, custom_merchant_name=""):
+        # Explicit Regex matching Currency terms (Rs, PKR, INR, $) to avoid picking up dates
         amount_match = re.search(r'(?:Rs\.?|INR|PKR|\$)\s*([\d,]+(?:\.\d{1,2})?)', sms_text, re.IGNORECASE)
-        amount = float(amount_match.group(1).replace(',', '')) if amount_match else 0.0
+        
+        if amount_match:
+            amount = float(amount_match.group(1).replace(',', ''))
+        else:
+            # Fallback for plain numeric values while ignoring full date formats (YYYY-MM-DD or DD/MM/YYYY)
+            clean_text_no_dates = re.sub(r'\b\d{2,4}[-/\.]\d{1,2}[-/\.]\d{2,4}\b', '', sms_text)
+            nums = re.findall(r'\b\d+(?:\.\d{1,2})?\b', clean_text_no_dates)
+            amount = float(nums[0]) if nums else 0.0
 
-        merchant = "General Merchant"
-        merchant_match = re.search(r'(?:to|at|paid to|sent to|received from|from|transfer from)\s+([A-Za-z0-9\s&]+?)(?=\s+(?:via|on|from|ref|dated|code|\.|$))', sms_text, re.IGNORECASE)
-        if merchant_match:
-            merchant = merchant_match.group(1).strip()
+        # Merchant fallback priority: Form Input -> Regex Extraction -> Default Name
+        merchant = custom_merchant_name.strip() if custom_merchant_name.strip() else ""
+        if not merchant:
+            merchant_match = re.search(r'(?:to|at|paid to|sent to|received from|from|transfer from)\s+([A-Za-z0-9\s&]+?)(?=\s+(?:via|on|from|ref|dated|code|\.|$))', sms_text, re.IGNORECASE)
+            if merchant_match:
+                merchant = merchant_match.group(1).strip()
+
+        if not merchant:
+            merchant = "Direct Customer / Merchant"
 
         method_match = re.search(r'(?:via|using|through)\s+([A-Za-z0-9\s]+?)(?=\s+(?:on|dated|ref|\.|$))', sms_text, re.IGNORECASE)
-        payment_method = method_match.group(1).strip() if method_match else "Direct Transfer"
+        payment_method = method_match.group(1).strip() if method_match else "Cash / Direct"
 
         is_debit = any(word in sms_text.lower() for word in ["paid", "sent", "debited", "spent", "withdrawn"])
         cat = auto_assign_category(merchant, sms_text) if is_debit else "Income"
@@ -787,7 +798,8 @@ else:
 
     st.sidebar.header("📩 Add Live Transaction / SMS")
     with st.sidebar.form("add_entry_form"):
-        user_sms = st.text_area("Paste SMS Text Here:", placeholder="e.g. Received Rs 5,000 from Ali Traders via EasyPaisa.")
+        merchant_input = st.text_input("Customer / Party Name *", placeholder="e.g. Ali Traders, Kashif")
+        user_sms = st.text_area("Paste SMS / Payment Note *", placeholder="e.g. Received Rs 5,000 via EasyPaisa or Paid Rs 2500")
         current_now = get_current_time()
         custom_date = st.date_input("Transaction Date:", value=current_now.date())
         custom_time = st.time_input("Transaction Time:", value=current_now.time())
@@ -797,7 +809,7 @@ else:
     if submit_entry:
         if user_sms.strip():
             entry_timestamp = datetime.combine(custom_date, custom_time).strftime("%Y-%m-%d %H:%M:%S")
-            parsed_record = parse_sms_logic(user_sms)
+            parsed_record = parse_sms_logic(user_sms, merchant_input)
             parsed_record["timestamp"] = entry_timestamp
             
             db.collection('transactions').add(parsed_record)
@@ -868,6 +880,14 @@ else:
             c3.metric("Net Balance", f"Rs. {net_balance:,.2f}")
 
             st.divider()
+            
+            # TRANSACTIONS GRAPH IN DIFFERENT COLORS (RED/GREEN)
+            st.subheader("📈 Transactions Summary Graph")
+            chart_data = filtered_df.groupby(['type'])['amount'].sum().reset_index()
+            if not chart_data.empty:
+                st.bar_chart(data=chart_data, x='type', y='amount', color='type')
+
+            st.divider()
             st.subheader("📋 Ledger Transactions Records")
             display_df = filtered_df.copy()
             display_df['Date & Time'] = display_df['timestamp'].dt.strftime('%Y-%m-%d %H:%M')
@@ -892,7 +912,7 @@ else:
         else:
             st.info("Chart of accounts will automatically populate when transactions are recorded.")
 
-    # 3. CUSTOMER DIRECTORY TAB (WITH PRIVACY MASKING)
+    # 3. CUSTOMER DIRECTORY TAB
     with tab_customers:
         st.subheader("👥 Customer & Merchant Directory")
         if not df.empty:
@@ -945,12 +965,13 @@ else:
             else:
                 st.warning("⚠️ Maximum limit of 2 Accountants reached.")
 
-    # BOTTOM SECURITY & DELETE ZONE (RESTRICTED TO OWNER)
+    # BOTTOM SECURITY & DELETE ZONE (EXCLUSIVELY RESTRICTED TO OWNER ONLY)
     st.markdown("---")
     bot_col1, bot_col2 = st.columns([3, 1])
     with bot_col1:
         st.caption(f"🔒 Security & Data Privacy Zone | Current Role: **{role}**")
     with bot_col2:
+        # STRICT CONDITION: SHOW DELETE BUTTON ONLY TO OWNER
         if role == "Owner":
             if st.button("🗑️ Delete Account", type="primary", use_container_width=True):
                 st.session_state['del_selected_btn'] = 'left'
