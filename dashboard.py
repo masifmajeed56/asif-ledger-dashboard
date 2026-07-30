@@ -87,10 +87,42 @@ if 'reactivate_prompt' not in st.session_state:
 if 'pending_login_data' not in st.session_state:
     st.session_state['pending_login_data'] = {}
 
-# NATIVE CSS OVERRIDES (STRICT LINK & TAB HOVER BLUE)
+# HIGH SPECIFICITY FORCEFUL CSS OVERRIDES
 st.markdown("""
 <style>
-    /* 1. STRICT PURE BLUE LINK HOVER OVERRIDE */
+    /* 1. AGGRESSIVE TAB HOVER OVERRIDE (FORCE BLUE COLOR & COMMENT EFFECT) */
+    div[data-baseweb="tab-list"] button[role="tab"]:hover,
+    div[data-baseweb="tab-list"] button[role="tab"]:hover *,
+    button[data-baseweb="tab"]:hover,
+    button[data-baseweb="tab"]:hover *,
+    .stTabs [data-baseweb="tab"]:hover,
+    .stTabs [data-baseweb="tab"]:hover * {
+        color: #0000FF !important;
+        fill: #0000FF !important;
+        font-weight: 700 !important;
+    }
+
+    /* TAB HOVER HIGHLIGHT / INDICATOR BAR FORCE BLUE */
+    div[data-baseweb="tab-highlight"] {
+        background-color: #0000FF !important;
+    }
+
+    /* TOOLTIP / HOVER COMMENTS STYLING OVERRIDE */
+    div[data-baseweb="tooltip"],
+    div[role="tooltip"] {
+        background-color: #0000FF !important;
+        color: #ffffff !important;
+        font-weight: bold !important;
+        border-radius: 6px !important;
+        box-shadow: 0px 4px 10px rgba(0,0,0,0.3) !important;
+    }
+
+    /* 2. CUSTOMER / PARTY NAME FIELD REAL-TIME AUTO CAPITALIZATION */
+    input[aria-label*="Customer / Party Name"] {
+        text-transform: capitalize !important;
+    }
+
+    /* 3. STRICT LINK HOVER BLUE OVERRIDE */
     a, a:link, a:visited, 
     .stMarkdown a, 
     div[data-testid="stMarkdownContainer"] a {
@@ -102,55 +134,25 @@ st.markdown("""
     a:hover, a:focus, a:active, 
     .stMarkdown a:hover, 
     div[data-testid="stMarkdownContainer"] a:hover {
-        color: #0000FF !important; /* Pure Vibrant Blue Hover */
+        color: #0000FF !important;
         text-decoration: underline !important;
         font-weight: bold !important;
     }
 
-    /* 2. DASHBOARD TABS HOVER EFFECT OVERRIDE (TEAM MANAGE, CHART OF ACCOUNTS, ETC.) */
-    button[data-baseweb="tab"] {
-        transition: all 0.2s ease-in-out !important;
-    }
-    
-    button[data-baseweb="tab"]:hover,
-    button[data-baseweb="tab"]:hover p,
-    button[data-baseweb="tab"]:hover div,
-    button[data-baseweb="tab"]:hover span {
-        color: #0000FF !important; /* Pure Blue Hover Color */
-        font-weight: bold !important;
-    }
-
-    /* 3. PRIMARY BUTTONS */
+    /* 4. BUTTON STYLING OVERRIDES */
     button[kind="primary"],
     div[data-testid="stFormSubmitButton"] > button {
         background-color: #003366 !important;
         color: #ffffff !important;
         border: 1px solid #002244 !important;
         font-weight: bold !important;
-        transition: all 0.3s ease-in-out !important;
     }
     button[kind="primary"]:hover,
     div[data-testid="stFormSubmitButton"] > button:hover {
-        background-color: #002244 !important;
+        background-color: #0000FF !important;
         color: #ffffff !important;
-        border-color: #001122 !important;
-        cursor: pointer !important;
-        box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.25) !important;
-    }
-
-    /* 4. SECONDARY BUTTONS */
-    button[kind="secondary"] {
-        background-color: #ffffff !important;
-        color: #003366 !important;
-        border: 1px solid #003366 !important;
-        font-weight: bold !important;
-        transition: all 0.3s ease-in-out !important;
-    }
-    button[kind="secondary"]:hover {
-        background-color: #e6f0fa !important;
-        color: #002244 !important;
-        border-color: #002244 !important;
-        cursor: pointer !important;
+        border-color: #0000CC !important;
+        box-shadow: 0px 4px 8px rgba(0,0,255,0.3) !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -792,7 +794,7 @@ else:
         if not merchant:
             merchant = "Direct Customer / Merchant"
 
-        # AUTOMATIC FIRST LETTER CAPITALIZATION FOR EVERY WORD
+        # AUTOMATIC TITLE CASE CAPITALIZATION FOR EVERY WORD
         merchant = merchant.title()
 
         method_match = re.search(r'(?:via|using|through)\s+([A-Za-z0-9\s]+?)(?=\s+(?:on|dated|ref|\.|$))', sms_text, re.IGNORECASE)
@@ -816,8 +818,12 @@ else:
 
     st.sidebar.header("📩 Add Live Transaction / SMS")
     with st.sidebar.form("add_entry_form"):
-        # CUSTOMER / PARTY NAME FIELD WITH AUTO TITLE-CASE FUNCTION
-        merchant_input = st.text_input("Customer / Party Name *", placeholder="e.g. Ali Traders, Kashif")
+        # CUSTOMER / PARTY NAME FIELD WITH AUTO CAPITALIZATION
+        merchant_input = st.text_input(
+            "Customer / Party Name *", 
+            placeholder="e.g. Ali Traders, Kashif",
+            help="Type party name (First letter of every word will be automatically capitalized)"
+        )
         
         user_sms = st.text_area("Paste SMS / Payment Note *", placeholder="e.g. Received Rs 5,000 via EasyPaisa or Paid Rs 2500")
         current_now = get_current_time()
@@ -828,7 +834,7 @@ else:
 
     if submit_entry:
         if user_sms.strip():
-            # CAPITALIZING CUSTOMER NAME (FIRST LETTER OF EVERY WORD)
+            # CAPITALIZING CUSTOMER NAME (TITLE CASE)
             formatted_merchant = merchant_input.strip().title()
             
             entry_timestamp = datetime.combine(custom_date, custom_time).strftime("%Y-%m-%d %H:%M:%S")
