@@ -256,7 +256,7 @@ if not st.session_state['logged_in']:
                 refresh_locked_captcha("login")
                 st.rerun()
 
-        # Dynamic State Evaluation to ensure real-time button activation
+        # Dynamic Values Read directly from Session State
         val_id = str(st.session_state.get('login_id_input', login_id)).strip()
         val_pw = str(st.session_state.get('login_pw_input', login_password)).strip()
         val_cap = str(st.session_state.get('login_cap_input', login_captcha)).strip()
@@ -266,7 +266,7 @@ if not st.session_state['logged_in']:
         if not login_form_valid:
             st.info("💡 Please fill in your Login ID, Password, and Captcha answer to enable the Login button.")
 
-        # HOVER TOOLTIP SET TO "Submit" + FULLY FUNCTIONAL ENABLED STATE
+        # SUBMIT BUTTON WITH HOVER HELP "Submit"
         submit_login = st.button("🔑 Login to Dashboard", type="primary", disabled=not login_form_valid, help="Submit")
 
         if submit_login:
@@ -298,6 +298,7 @@ if not st.session_state['logged_in']:
                     if user_doc.exists:
                         user_data = user_doc.to_dict()
                         if user_data['password'] == make_hash(val_pw):
+                            # DIRECT DYNAMIC REDIRECT TRIGGER
                             st.session_state['logged_in'] = True
                             st.session_state['user_email'] = target_email
                             st.session_state['business_id'] = target_email
@@ -309,8 +310,7 @@ if not st.session_state['logged_in']:
                                 "password": val_pw
                             }
                             refresh_locked_captcha("login")
-                            st.success("Login Successful!")
-                            st.rerun()
+                            st.rerun() # Immediate Page Refresh to App Dashboard
                         else:
                             st.error("🚨 Incorrect Password! Please try again.")
                     else:
@@ -342,11 +342,17 @@ if not st.session_state['logged_in']:
                     db.collection('usernames').document(data['username']).set({"email": data['email']})
                     db.collection('phone_numbers').document(data['phone_raw']).set({"email": data['email']})
                     
+                    # LOG USER DIRECTLY INTO APP DASHBOARD
+                    st.session_state['logged_in'] = True
+                    st.session_state['user_email'] = data['email']
+                    st.session_state['business_id'] = data['email']
+                    st.session_state['business_details'] = data
+                    
                     st.session_state['otp_step'] = False
                     st.session_state['generated_otp'] = ""
                     st.session_state['pending_user_data'] = {}
                     
-                    st.success("🎉 Account Verified & Created Successfully!")
+                    st.rerun() # Immediate Page Refresh to App Dashboard
                 else:
                     st.error("❌ Invalid OTP Code. Please re-check and enter again.")
 
