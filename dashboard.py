@@ -5,7 +5,7 @@ import re
 import io
 import hashlib
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from PIL import Image
 from google.cloud import firestore
@@ -14,10 +14,10 @@ from google.oauth2 import service_account
 # Page Setup
 st.set_page_config(page_title="Asif Ledger Solutions", layout="wide")
 
-# Force Override Streamlit's Default Red Theme with Office Blue
+# Custom CSS: Override Submit Buttons to Blue and Specific Delete Buttons to Black
 st.markdown("""
 <style>
-    /* Complete Red Theme Override for Primary Buttons */
+    /* Primary / Submit Buttons Override (Blue) */
     button[kind="primary"],
     .stButton > button[data-testid="baseButton-primary"],
     div.stButton > button[kind="primary"] {
@@ -28,7 +28,6 @@ st.markdown("""
         font-weight: bold !important;
     }
 
-    /* Primary Button Hover State */
     button[kind="primary"]:hover,
     .stButton > button[data-testid="baseButton-primary"]:hover,
     div.stButton > button[kind="primary"]:hover {
@@ -36,6 +35,21 @@ st.markdown("""
         color: #ffffff !important;
         border-color: #004085 !important;
         cursor: pointer !important;
+    }
+
+    /* Delete Account Specific Dark/Black Buttons Override */
+    .delete-btn-black button,
+    div.delete-btn-black > button {
+        background-color: #1e1e1e !important;
+        color: #ffffff !important;
+        border: 1px solid #000000 !important;
+        font-weight: bold !important;
+    }
+    .delete-btn-black button:hover,
+    div.delete-btn-black > button:hover {
+        background-color: #333333 !important;
+        color: #ffffff !important;
+        border-color: #000000 !important;
     }
 
     /* Secondary Inactive Buttons Styling */
@@ -47,7 +61,6 @@ st.markdown("""
         border: 1px solid #cccccc !important;
     }
 
-    /* Secondary Button Hover State */
     button[kind="secondary"]:hover,
     .stButton > button[data-testid="baseButton-secondary"]:hover,
     div.stButton > button[kind="secondary"]:hover {
@@ -57,7 +70,6 @@ st.markdown("""
         cursor: pointer !important;
     }
 
-    /* Interactive Link Hover Effects */
     a {
         color: #003366 !important;
         text-decoration: none !important;
@@ -91,7 +103,7 @@ def get_db():
 
 db = get_db()
 
-# Country Codes with Flags & Matching Phone Placeholders
+# Country Codes
 COUNTRY_DATA = {
     "🇵🇰 +92": {"code": "92", "placeholder": "3001234567"},
     "🇦🇪 +971": {"code": "971", "placeholder": "501234567"},
@@ -148,6 +160,51 @@ def generate_username_suggestions(base_text):
             break
     return available
 
+# Permanent Deletion Helper Function
+def purge_user_permanently(user_email, username, phone_raw):
+    try:
+        if user_email:
+            db.collection('users').document(user_email).delete()
+        if username:
+            db.collection('usernames').document(username).delete()
+        if phone_raw:
+            db.collection('phone_numbers').document(phone_raw).delete()
+        
+        txs = db.collection('transactions').where('business_id', '==', user_email).stream()
+        for t in txs:
+            t.reference.delete()
+    except Exception as e:
+        pass
+
+# Excel Backup Generator for Delete Window
+def generate_excel_backup(user_data, user_email):
+    output = io.BytesIO()
+    tx_docs = db.collection('transactions').where('business_id', '==', user_email).stream()
+    tx_list = [t.to_dict() for t in tx_docs]
+    
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        # Profile Info Sheet
+        profile_df = pd.DataFrame([{
+            "Business Name": user_data.get("business_name", ""),
+            "Username": user_data.get("username", ""),
+            "Email": user_data.get("email", ""),
+            "Phone": user_data.get("phone", ""),
+            "Business Type": user_data.get("business_type", ""),
+            "Export Date": get_current_time().strftime("%Y-%m-%d %H:%M:%S")
+        }])
+        profile_df.to_excel(writer, index=False, sheet_name='Account Profile')
+        
+        # Transactions Sheet
+        if tx_list:
+            tx_df = pd.DataFrame(tx_list)
+            if "logo_hex" in tx_df.columns:
+                tx_df = tx_df.drop(columns=["logo_hex"])
+            tx_df.to_excel(writer, index=False, sheet_name='Ledger Entries')
+        else:
+            pd.DataFrame([{"Message": "No transactions recorded yet."}]).to_excel(writer, index=False, sheet_name='Ledger Entries')
+            
+    return output.getvalue()
+
 # Session State Initializations
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
@@ -167,6 +224,12 @@ if 'pending_user_data' not in st.session_state:
     st.session_state['pending_user_data'] = {}
 if 'saved_accounts_dict' not in st.session_state:
     st.session_state['saved_accounts_dict'] = {}
+if 'del_step' not in st.session_state:
+    st.session_state['del_step'] = 1
+if 'reactivate_prompt' not in st.session_state:
+    st.session_state['reactivate_prompt'] = False
+if 'pending_login_data' not in st.session_state:
+    st.session_state['pending_login_data'] = {}
 
 # Persistent Captcha Logic
 def get_locked_captcha(key_prefix):
@@ -175,10 +238,7 @@ def get_locked_captcha(key_prefix):
     if n1_key not in st.session_state or n2_key not in st.session_state:
         st.session_state[n1_key] = random.randint(1, 12)
         st.session_state[n2_key] = random.randint(1, 9)
-    
-    n1 = st.session_state[n1_key]
-    n2 = st.session_state[n2_key]
-    return n1, n2, n1 + n2
+    return st.session_state[n1_key], st.session_state[n2_key], st.session_state[n1_key] + st.session_state[n2_key]
 
 def refresh_locked_captcha(key_prefix):
     st.session_state[f"{key_prefix}_c_n1"] = random.randint(1, 12)
@@ -189,9 +249,144 @@ def refresh_locked_captcha(key_prefix):
 def show_not_found_popup():
     st.error("🚨 Business Account Not Found!")
     st.write("No account exists with this Email, Username, or Phone Number. Please create a new account.")
-    if st.button("👉 Go to Signup Window Now", help="Click to switch to the account registration window"):
+    if st.button("👉 Go to Signup Window Now"):
         st.session_state['active_window'] = "Signup Window"
         st.rerun()
+
+# ------------------ RE-ACTIVATION DIALOG PROMPT ------------------
+@st.dialog("🔄 Keep Account or Go Back?")
+def show_reactivation_dialog():
+    st.warning("⚠️ Pending Account Deletion Found!")
+    st.write("Aapne is account ko **7 Days Deletion Queue** mein dala hua tha.")
+    st.write("### **Kya aap apna account dobara rakhna chahte hain?**")
+    
+    col_r1, col_r2 = st.columns(2)
+    with col_r1:
+        if st.button("✅ Yes, Keep My Account", type="primary", use_container_width=True):
+            target_email = st.session_state['pending_login_data']['email']
+            user_data = st.session_state['pending_login_data']['user_data']
+            val_pw = st.session_state['pending_login_data']['password']
+            
+            # Remove deletion tag in DB
+            db.collection('users').document(target_email).update({
+                "status": "active",
+                "deletion_requested_at": firestore.DELETE_FIELD
+            })
+            user_data["status"] = "active"
+            
+            # Login Success
+            st.session_state['logged_in'] = True
+            st.session_state['user_email'] = target_email
+            st.session_state['business_id'] = target_email
+            st.session_state['business_details'] = user_data
+            
+            account_label = f"{user_data.get('business_name', 'Business')} (@{user_data.get('username', 'user')})"
+            st.session_state['saved_accounts_dict'][account_label] = {
+                "login": target_email,
+                "password": val_pw
+            }
+            
+            st.session_state['reactivate_prompt'] = False
+            st.session_state['pending_login_data'] = {}
+            st.toast("🎉 Welcome back! Your account has been activated again.")
+            st.rerun()
+
+    with col_r2:
+        if st.button("🚫 Go Back to Signup", use_container_width=True):
+            st.session_state['reactivate_prompt'] = False
+            st.session_state['pending_login_data'] = {}
+            st.session_state['active_window'] = "Signup Window"
+            st.rerun()
+
+# ------------------ DELETE ACCOUNT DIALOG FLOW ------------------
+@st.dialog("🗑️ Permanently Delete Account")
+def show_delete_account_dialog():
+    user_data = st.session_state['business_details']
+    
+    # Step 1: Warning Message
+    if st.session_state['del_step'] == 1:
+        st.error("⚠️ WARNING: THIS ACTION CANNOT BE UNDONE!")
+        st.write("Are you sure you want to request permanent deletion of your business account and all associated ledger entries?")
+        
+        col_d1, col_d2 = st.columns(2)
+        with col_d1:
+            st.markdown('<div class="delete-btn-black">', unsafe_allow_html=True)
+            if st.button("YES, I AM SURE", use_container_width=True):
+                st.session_state['del_step'] = 2
+                st.rerun()
+            st.markdown('</div>', unsafe_allow_html=True)
+        with col_d2:
+            if st.button("Cancel", use_container_width=True):
+                st.rerun()
+
+    # Step 2: User Verification Details & Password
+    elif st.session_state['del_step'] == 2:
+        st.subheader("🔐 Verify Account Ownership")
+        st.write("Please enter your account details and password to confirm deletion request:")
+        
+        dn1, dn2, dans = get_locked_captcha("delete_acc")
+        
+        with st.form("delete_verify_form"):
+            del_id = st.text_input("Enter Email, Username, or Phone Number *", value=st.session_state['user_email'])
+            del_password = st.text_input("Enter Account Password *", type="password")
+            del_captcha = st.text_input(f"Question: What is {dn1} + {dn2} ? *")
+            
+            st.markdown('<div class="delete-btn-black">', unsafe_allow_html=True)
+            submit_del_verify = st.form_submit_button("Verify Details & Proceed Deletion", use_container_width=True)
+            st.markdown('</div>', unsafe_allow_html=True)
+
+        if submit_del_verify:
+            if not del_id or not del_password or not del_captcha:
+                st.warning("⚠️ Please fill in all verification fields.")
+            elif not del_captcha.isnumeric() or int(del_captcha) != dans:
+                refresh_locked_captcha("delete_acc")
+                st.error("🚨 Incorrect Captcha answer!")
+            else:
+                if user_data.get('password') == make_hash(del_password):
+                    st.session_state['del_step'] = 3
+                    refresh_locked_captcha("delete_acc")
+                    st.rerun()
+                else:
+                    st.error("🚨 Incorrect Password! Deletion aborted.")
+
+    # Step 3: Download Backup (Excel File) & Schedule Deletion Notice
+    elif st.session_state['del_step'] == 3:
+        st.warning("⏰ Account Deletion Scheduled in 7 Days!")
+        st.write("Aapka account **7 Days** (168 Hours) ke baad database se **permanently delete** kar diya jayega.")
+        st.info("💡 **Note:** Is 7 Days ke doran agar aap dobara signin karenge toh aap se poocha jayega ke aap account rakhna chahte hain ya Signup par jana chahte hain.")
+        
+        st.subheader("📊 Download Complete Data Backup (Excel File)")
+        st.write("Niche buttons se apna data file (PC ya Mobile) mein download kar lein:")
+
+        # Excel Backup File Generation
+        excel_backup_bytes = generate_excel_backup(user_data, st.session_state['user_email'])
+        
+        st.download_button(
+            label="⬇️ Download Account Data File (.xlsx)",
+            data=excel_backup_bytes,
+            file_name=f"{user_data.get('username', 'user')}_ledger_backup.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        )
+        
+        st.divider()
+        st.markdown('<div class="delete-btn-black">', unsafe_allow_html=True)
+        if st.button("Continue to Logout & Submit Deletion", use_container_width=True):
+            # Update Account Deletion Request Timestamp in DB
+            now_iso = get_current_time().strftime("%Y-%m-%d %H:%M:%S")
+            db.collection('users').document(st.session_state['user_email']).update({
+                "status": "deletion_requested",
+                "deletion_requested_at": now_iso
+            })
+            
+            # Reset Session and Redirect to Login Window
+            st.session_state['logged_in'] = False
+            st.session_state['user_email'] = ""
+            st.session_state['business_id'] = ""
+            st.session_state['business_details'] = {}
+            st.session_state['active_window'] = "Login Window"
+            st.session_state['del_step'] = 1
+            st.rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
 
 # ------------------ SCREEN 1: LOGIN & SIGNUP WINDOWS ------------------
 if not st.session_state['logged_in']:
@@ -201,16 +396,20 @@ if not st.session_state['logged_in']:
     col_w1, col_w2, _ = st.columns([1, 1, 2])
     with col_w1:
         is_login = st.session_state['active_window'] == "Login Window"
-        if st.button("Login", use_container_width=True, type="primary" if is_login else "secondary", help="Click to switch to the Login form"):
+        if st.button("Login", use_container_width=True, type="primary" if is_login else "secondary"):
             st.session_state['active_window'] = "Login Window"
             st.rerun()
     with col_w2:
         is_signup = st.session_state['active_window'] == "Signup Window"
-        if st.button("Signup", use_container_width=True, type="primary" if is_signup else "secondary", help="Click to switch to the Account Registration form"):
+        if st.button("Signup", use_container_width=True, type="primary" if is_signup else "secondary"):
             st.session_state['active_window'] = "Signup Window"
             st.rerun()
 
     st.divider()
+
+    # If reactivation prompt was triggered during login attempt
+    if st.session_state['reactivate_prompt']:
+        show_reactivation_dialog()
 
     # WINDOW 1: LOGIN WINDOW
     if st.session_state['active_window'] == "Login Window":
@@ -220,7 +419,7 @@ if not st.session_state['logged_in']:
         selected_acc_key = "-- Select Saved Account --"
         
         if saved_dict:
-            selected_acc_key = st.selectbox("💡 Quick Select Saved Account:", ["-- Select Saved Account --"] + list(saved_dict.keys()), help="Select a previously logged in account to autofill details")
+            selected_acc_key = st.selectbox("💡 Quick Select Saved Account:", ["-- Select Saved Account --"] + list(saved_dict.keys()))
         
         preset_login = ""
         preset_password = ""
@@ -231,15 +430,14 @@ if not st.session_state['logged_in']:
 
         l_n1, l_n2, l_ans = get_locked_captcha("login")
 
-        # FORM WRAPPER FOR ENTER KEY PRESS SUPPORT
         with st.form("login_form", clear_on_submit=False):
-            login_id = st.text_input("Username (@handle), Email, or Phone Number", value=preset_login, placeholder="e.g. user_handle, name@email.com, or +923001234567", key="login_id_input")
-            login_password = st.text_input("Password", type="password", value=preset_password, key="login_pw_input")
+            login_id = st.text_input("Username (@handle), Email, or Phone Number", value=preset_login, placeholder="e.g. user_handle, name@email.com, or +923001234567")
+            login_password = st.text_input("Password", type="password", value=preset_password)
 
             st.markdown("#### 🤖 Human Verification")
-            login_captcha = st.text_input(f"Question: What is {l_n1} + {l_n2} ? *", placeholder="Enter sum answer", key="login_cap_input")
+            login_captcha = st.text_input(f"Question: What is {l_n1} + {l_n2} ? *", placeholder="Enter sum answer")
 
-            submit_login = st.form_submit_button("🔑 Login to Dashboard", type="primary", help="Press Enter or Click to Submit")
+            submit_login = st.form_submit_button("🔑 Login to Dashboard", type="primary")
 
         if submit_login:
             val_id = str(login_id).strip()
@@ -276,7 +474,31 @@ if not st.session_state['logged_in']:
                     if user_doc.exists:
                         user_data = user_doc.to_dict()
                         if user_data['password'] == make_hash(val_pw):
-                            # GUARANTEED REDIRECT TO DASHBOARD
+                            
+                            # CHECK FOR 7-DAY DELETION EXPIRY & RE-ACTIVATION CONFIRMATION
+                            if user_data.get("status") == "deletion_requested":
+                                req_time_str = user_data.get("deletion_requested_at")
+                                if req_time_str:
+                                    req_dt = datetime.strptime(req_time_str, "%Y-%m-%d %H:%M:%S").replace(tzinfo=ZoneInfo('Asia/Karachi'))
+                                    time_passed = get_current_time() - req_dt
+                                    
+                                    if time_passed > timedelta(days=7):
+                                        # 7 Days Passed -> Purge User permanently
+                                        purge_user_permanently(target_email, user_data.get("username"), user_data.get("phone_raw"))
+                                        st.error("🚨 This account was permanently deleted after 7 days as requested.")
+                                        st.stop()
+                                    else:
+                                        # Within 7 Days -> Prompt user to confirm or go to signup
+                                        st.session_state['pending_login_data'] = {
+                                            "email": target_email,
+                                            "user_data": user_data,
+                                            "password": val_pw
+                                        }
+                                        st.session_state['reactivate_prompt'] = True
+                                        refresh_locked_captcha("login")
+                                        st.rerun()
+
+                            # STANDARD DIRECT LOGIN SUCCESS
                             st.session_state['logged_in'] = True
                             st.session_state['user_email'] = target_email
                             st.session_state['business_id'] = target_email
@@ -298,16 +520,14 @@ if not st.session_state['logged_in']:
 
     # WINDOW 2: SIGNUP WINDOW
     elif st.session_state['active_window'] == "Signup Window":
-        
-        # OTP STEP
         if st.session_state['otp_step']:
             st.markdown("### 🔐 Verify OTP Security Code")
             st.info(f"An OTP Verification code was dispatched for **{st.session_state['pending_user_data']['email']}**.")
             st.success(f"🔑 Secret OTP Code: **{st.session_state['generated_otp']}**")
             
             with st.form("otp_form"):
-                entered_otp = st.text_input("Enter 6-Digit OTP Code:", max_chars=6, key="otp_input_key")
-                submit_otp = st.form_submit_button("✅ Verify OTP & Finalize Account", type="primary", help="Press Enter or Click to Submit")
+                entered_otp = st.text_input("Enter 6-Digit OTP Code:", max_chars=6)
+                submit_otp = st.form_submit_button("✅ Verify OTP & Finalize Account", type="primary")
             
             if submit_otp:
                 otp_val = str(entered_otp).strip()
@@ -318,7 +538,6 @@ if not st.session_state['logged_in']:
                     db.collection('usernames').document(data['username']).set({"email": data['email']})
                     db.collection('phone_numbers').document(data['phone_raw']).set({"email": data['email']})
                     
-                    # LOG USER DIRECTLY INTO DASHBOARD
                     st.session_state['logged_in'] = True
                     st.session_state['user_email'] = data['email']
                     st.session_state['business_id'] = data['email']
@@ -327,23 +546,21 @@ if not st.session_state['logged_in']:
                     st.session_state['otp_step'] = False
                     st.session_state['generated_otp'] = ""
                     st.session_state['pending_user_data'] = {}
-                    
                     st.rerun()
                 else:
                     st.error("❌ Invalid OTP Code. Please re-check and enter again.")
 
             st.markdown("---")
-            if st.button("👉 Go to Login Window", help="Click to switch to the account login window"):
+            if st.button("👉 Go to Login Window"):
                 st.session_state['active_window'] = "Login Window"
                 st.rerun()
 
-        # SIGNUP FORM STEP
         else:
             st.markdown("### 📝 Create New Business Account")
             s_n1, s_n2, s_ans = get_locked_captcha("signup")
 
             with st.form("signup_form"):
-                check_email = st.text_input("User Email Address *", placeholder="name@domain.com", key="live_signup_email")
+                check_email = st.text_input("User Email Address *", placeholder="name@domain.com")
                 
                 st.markdown("#### 📞 Contact Phone Number *")
                 p_col1, p_col2 = st.columns([1, 3])
@@ -351,25 +568,24 @@ if not st.session_state['logged_in']:
                     selected_country = st.selectbox("Country Code", list(COUNTRY_DATA.keys()))
                 
                 country_info = COUNTRY_DATA[selected_country]
-                dynamic_placeholder = country_info["placeholder"]
                 
                 with p_col2:
-                    check_phone = st.text_input("Phone Number", placeholder=dynamic_placeholder, key="live_signup_phone")
+                    check_phone = st.text_input("Phone Number", placeholder=country_info["placeholder"])
 
                 grid_c1, grid_c2 = st.columns(2)
                 with grid_c1:
-                    password = st.text_input("Unique Password *", type="password", placeholder="8+ chars, Uppercase, Number & Symbol", key="signup_pw_key")
-                    biz_name = st.text_input("Business Name *", placeholder="e.g. Ali Traders, Bismillah Pharmacy", key="signup_biz_key")
+                    password = st.text_input("Unique Password *", type="password", placeholder="8+ chars, Uppercase, Number & Symbol")
+                    biz_name = st.text_input("Business Name *", placeholder="e.g. Ali Traders, Bismillah Pharmacy")
 
                 with grid_c2:
-                    username_input = st.text_input("Choose Unique Username / Handle (Optional)", placeholder="Auto-generated if left empty", key="signup_user_key")
+                    username_input = st.text_input("Choose Unique Username / Handle (Optional)", placeholder="Auto-generated if left empty")
                     biz_type = st.selectbox("Business Category", ["Grocery Store", "Medical Store / Pharmacy", "General Store", "Services / Consulting", "Wholesale", "Other"])
 
                 st.markdown("#### 🤖 Human Verification")
-                captcha_input = st.text_input(f"Question: What is {s_n1} + {s_n2} ? *", placeholder="Enter sum answer", key="signup_cap_key")
+                captcha_input = st.text_input(f"Question: What is {s_n1} + {s_n2} ? *", placeholder="Enter sum answer")
                 logo_file = st.file_uploader("Upload Business Logo (PNG / JPG)", type=["png", "jpg", "jpeg"])
 
-                submit_signup = st.form_submit_button("🚀 Verify & Create Account", type="primary", help="Press Enter or Click to Submit")
+                submit_signup = st.form_submit_button("🚀 Verify & Create Account", type="primary")
 
             if submit_signup:
                 email_clean = check_email.lower().strip()
@@ -413,6 +629,7 @@ if not st.session_state['logged_in']:
                             "phone": f"+{extracted_code} {phone_clean}",
                             "phone_raw": formatted_phone_key,
                             "logo_hex": logo_data_str,
+                            "status": "active",
                             "created_at": get_current_time().strftime("%Y-%m-%d %H:%M:%S")
                         }
                         st.session_state['generated_otp'] = generated_code
@@ -442,7 +659,7 @@ else:
         st.caption(f"Category: {biz_info.get('business_type', 'General')} | Handle: @{biz_info.get('username', 'business')} | Contact: {biz_info.get('phone', '')}")
 
     with top_c3:
-        if st.button("🚪 Logout", help="Click to log out safely from your business dashboard session"):
+        if st.button("🚪 Logout"):
             st.session_state['logged_in'] = False
             st.session_state['user_email'] = ""
             st.session_state['business_id'] = ""
@@ -453,7 +670,6 @@ else:
 
     st.divider()
 
-    # Category Mapper & Merchant Parser Logic
     CATEGORIES = {
         "Fuel & Automobile": ["shell", "pso", "total", "petrol", "fuel", "cng"],
         "Utilities": ["k-electric", "lesco", "fesco", "ptcl", "stormfiber", "sngpl", "bill"],
@@ -525,7 +741,7 @@ else:
     custom_time = st.sidebar.time_input("Transaction Time:", value=current_now.time())
     entry_timestamp = datetime.combine(custom_date, custom_time).strftime("%Y-%m-%d %H:%M:%S")
 
-    if st.sidebar.button("Process & Save Transaction", help="Click to parse SMS text and save entry into ledger database"):
+    if st.sidebar.button("Process & Save Transaction", type="primary"):
         if user_sms.strip():
             parsed_record = parse_sms_logic(user_sms)
             parsed_record["timestamp"] = entry_timestamp
@@ -618,8 +834,7 @@ else:
                     label="📄 Export CSV",
                     data=csv_data,
                     file_name=f"{biz_info.get('username', 'ledger')}_transactions.csv",
-                    mime="text/csv",
-                    help="Click to download filtered transactions in CSV spreadsheet format"
+                    mime="text/csv"
                 )
                 
                 excel_data = convert_df_to_excel(filtered_df)
@@ -627,8 +842,7 @@ else:
                     label="📊 Export Excel",
                     data=excel_data,
                     file_name=f"{biz_info.get('username', 'ledger')}_transactions.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    help="Click to download filtered transactions in Microsoft Excel format"
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 )
 
             display_df = filtered_df.copy()
@@ -656,7 +870,7 @@ else:
         
         if not df.empty:
             merchants_list = sorted(list(df['merchant'].unique()))
-            selected_merchant = st.selectbox("Select Customer / Merchant to View Ledger:", merchants_list, help="Filter detailed transaction statement for a specific client")
+            selected_merchant = st.selectbox("Select Customer / Merchant to View Ledger:", merchants_list)
             
             if selected_merchant:
                 m_df = df[df['merchant'] == selected_merchant]
@@ -678,3 +892,15 @@ else:
                 )
         else:
             st.info("Customer history will appear here once transactions are recorded.")
+
+    # ------------------ BOTTOM DELETE USER SECTION ------------------
+    st.markdown("---")
+    bot_col1, bot_col2 = st.columns([3, 1])
+    with bot_col1:
+        st.caption("🔒 Security & Data Privacy Zone")
+    with bot_col2:
+        st.markdown('<div class="delete-btn-black">', unsafe_allow_html=True)
+        if st.button("🗑️ Delete Account", use_container_width=True):
+            st.session_state['del_step'] = 1
+            show_delete_account_dialog()
+        st.markdown('</div>', unsafe_allow_html=True)
