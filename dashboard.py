@@ -90,13 +90,18 @@ if 'pending_login_data' not in st.session_state:
 # NATIVE CSS OVERRIDES (STRICT LINK HOVER BLUE & BUTTON STYLING)
 st.markdown("""
 <style>
-    /* 1. FORCE PURE BLUE LINK HOVER OVERRIDE */
-    a, a:visited, a:link {
+    /* 1. STRICT PURE BLUE LINK HOVER OVERRIDE (TARGETING STREAMLIT CONTAINERS) */
+    a, a:link, a:visited, 
+    .stMarkdown a, 
+    div[data-testid="stMarkdownContainer"] a {
         color: #003366 !important;
         text-decoration: none !important;
         transition: color 0.2s ease-in-out !important;
     }
-    a:hover, a:focus, a:active, p a:hover, span a:hover {
+    
+    a:hover, a:focus, a:active, 
+    .stMarkdown a:hover, 
+    div[data-testid="stMarkdownContainer"] a:hover {
         color: #0000FF !important; /* Pure Vibrant Blue Hover */
         text-decoration: underline !important;
         font-weight: bold !important;
@@ -690,7 +695,7 @@ if not st.session_state['logged_in']:
                             "email": email_clean,
                             "password_raw": password,
                             "password": make_hash(password),
-                            "business_name": biz_name.strip(),
+                            "business_name": biz_name.strip().title(), # Capitalize business name
                             "business_type": biz_type,
                             "phone": f"+{extracted_code} {phone_clean}",
                             "phone_raw": formatted_phone_key,
@@ -754,20 +759,18 @@ else:
                 return category
         return "General Expense"
 
-    # STRICT PARSER: RUPEES VS DATE SAFEGUARD & MERCHANT NAME FIX
+    # STRICT PARSER: RUPEES VS DATE SAFEGUARD & MERCHANT NAME FIX WITH TITLE CASE
     def parse_sms_logic(sms_text, custom_merchant_name=""):
-        # Explicit Regex matching Currency terms (Rs, PKR, INR, $) to avoid picking up dates
+        # Explicit Regex matching Currency terms (Rs, PKR, INR, $)
         amount_match = re.search(r'(?:Rs\.?|INR|PKR|\$)\s*([\d,]+(?:\.\d{1,2})?)', sms_text, re.IGNORECASE)
         
         if amount_match:
             amount = float(amount_match.group(1).replace(',', ''))
         else:
-            # Fallback for plain numeric values while ignoring full date formats (YYYY-MM-DD or DD/MM/YYYY)
             clean_text_no_dates = re.sub(r'\b\d{2,4}[-/\.]\d{1,2}[-/\.]\d{2,4}\b', '', sms_text)
             nums = re.findall(r'\b\d+(?:\.\d{1,2})?\b', clean_text_no_dates)
             amount = float(nums[0]) if nums else 0.0
 
-        # Merchant fallback priority: Form Input -> Regex Extraction -> Default Name
         merchant = custom_merchant_name.strip() if custom_merchant_name.strip() else ""
         if not merchant:
             merchant_match = re.search(r'(?:to|at|paid to|sent to|received from|from|transfer from)\s+([A-Za-z0-9\s&]+?)(?=\s+(?:via|on|from|ref|dated|code|\.|$))', sms_text, re.IGNORECASE)
@@ -777,8 +780,11 @@ else:
         if not merchant:
             merchant = "Direct Customer / Merchant"
 
+        # AUTOMATIC FIRST LETTER CAPITALIZATION FOR CUSTOMER / PARTY NAME
+        merchant = merchant.title()
+
         method_match = re.search(r'(?:via|using|through)\s+([A-Za-z0-9\s]+?)(?=\s+(?:on|dated|ref|\.|$))', sms_text, re.IGNORECASE)
-        payment_method = method_match.group(1).strip() if method_match else "Cash / Direct"
+        payment_method = method_match.group(1).strip().title() if method_match else "Cash / Direct"
 
         is_debit = any(word in sms_text.lower() for word in ["paid", "sent", "debited", "spent", "withdrawn"])
         cat = auto_assign_category(merchant, sms_text) if is_debit else "Income"
@@ -788,7 +794,7 @@ else:
             "entered_by_role": role,
             "raw_sms": sms_text,
             "amount": amount,
-            "merchant": merchant,
+            "merchant": merchant, # Title Case Applied Here
             "payment_method": payment_method,
             "type": "Debit" if is_debit else "Credit",
             "category": cat,
@@ -825,6 +831,9 @@ else:
             d = doc.to_dict()
             if "timestamp" not in d or not d["timestamp"]:
                 d["timestamp"] = get_current_time().strftime("%Y-%m-%d %H:%M:%S")
+            # Ensure Title Case even for historical entries
+            if "merchant" in d and d["merchant"]:
+                d["merchant"] = str(d["merchant"]).title()
             data.append(d)
         if data:
             df_loaded = pd.DataFrame(data)
@@ -881,7 +890,7 @@ else:
 
             st.divider()
             
-            # TRANSACTIONS GRAPH IN DIFFERENT COLORS (RED/GREEN)
+            # TRANSACTIONS GRAPH IN DIFFERENT COLORS
             st.subheader("📈 Transactions Summary Graph")
             chart_data = filtered_df.groupby(['type'])['amount'].sum().reset_index()
             if not chart_data.empty:
@@ -971,7 +980,6 @@ else:
     with bot_col1:
         st.caption(f"🔒 Security & Data Privacy Zone | Current Role: **{role}**")
     with bot_col2:
-        # STRICT CONDITION: SHOW DELETE BUTTON ONLY TO OWNER
         if role == "Owner":
             if st.button("🗑️ Delete Account", type="primary", use_container_width=True):
                 st.session_state['del_selected_btn'] = 'left'
