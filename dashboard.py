@@ -16,7 +16,7 @@ st.set_page_config(page_title="Asif Ledger Solutions", layout="wide")
 
 # Session State Initializations
 if 'del_selected_btn' not in st.session_state:
-    st.session_state['del_selected_btn'] = 'left'  # Always Default Left Selected
+    st.session_state['del_selected_btn'] = 'left'  # Default Left Selected
 
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
@@ -45,68 +45,69 @@ if 'reactivate_prompt' not in st.session_state:
 if 'pending_login_data' not in st.session_state:
     st.session_state['pending_login_data'] = {}
 
-# Custom CSS: Hover Effects, Office Blue Override & Active/Inactive Toggles
+# FIXED CSS: Exact Streamlit DOM Targeting
 st.markdown("""
 <style>
-    /* 1. Global Submit & Primary Blue Buttons Override */
-    button[kind="primary"],
-    .stButton > button[data-testid="baseButton-primary"],
-    div.stButton > button[kind="primary"],
-    .blue-btn button,
-    div.blue-btn > button {
+    /* 1. Universal Form Submit Buttons Direct Override */
+    div[data-testid="stFormSubmitButton"] > button,
+    div[data-testid="stFormSubmitButton"] button {
         background-color: #003366 !important;
         color: #ffffff !important;
         border: 1px solid #002244 !important;
-        background-image: none !important;
         font-weight: bold !important;
         transition: all 0.3s ease-in-out !important;
     }
-
-    /* Hover Effect: Changes to Office Blue (#002244) */
-    button[kind="primary"]:hover,
-    .stButton > button[data-testid="baseButton-primary"]:hover,
-    .blue-btn button:hover,
-    div.blue-btn > button:hover {
+    div[data-testid="stFormSubmitButton"] > button:hover,
+    div[data-testid="stFormSubmitButton"] button:hover {
         background-color: #002244 !important; /* Office Blue Hover */
         color: #ffffff !important;
         border-color: #001122 !important;
         cursor: pointer !important;
-        box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2) !important;
+        box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.25) !important;
     }
 
-    /* 2. Selected Left Button (Blue + Office Blue Hover) */
-    .btn-blue button, div.btn-blue > button {
+    /* 2. Custom Blue Wrapper (For Left & Active Buttons) */
+    div.btn-blue > div[data-testid="stButton"] > button,
+    div.btn-blue button,
+    div.blue-btn > div[data-testid="stButton"] > button,
+    div.blue-btn button {
         background-color: #003366 !important;
         color: #ffffff !important;
         border: 1px solid #002244 !important;
         font-weight: bold !important;
         transition: all 0.3s ease-in-out !important;
     }
-    .btn-blue button:hover, div.btn-blue > button:hover {
-        background-color: #002244 !important; /* Office Blue Hover Comment/Effect */
+    div.btn-blue button:hover,
+    div.blue-btn button:hover {
+        background-color: #002244 !important; /* Office Blue Hover */
         color: #ffffff !important;
         cursor: pointer !important;
     }
 
-    /* 3. Unselected Right Button (White + Light Blue Hover) */
-    .btn-white button, div.btn-white > button {
+    /* 3. Custom White Wrapper (For Right & Unselected Buttons) */
+    div.btn-white > div[data-testid="stButton"] > button,
+    div.btn-white button {
         background-color: #ffffff !important;
         color: #003366 !important;
         border: 1px solid #003366 !important;
         font-weight: bold !important;
         transition: all 0.3s ease-in-out !important;
     }
-    .btn-white button:hover, div.btn-white > button:hover {
+    div.btn-white button:hover {
         background-color: #e6f0fa !important;
         color: #002244 !important;
         border-color: #002244 !important;
         cursor: pointer !important;
     }
 
-    /* Links Styling */
-    a {
-        color: #003366 !important;
-        text-decoration: none !important;
+    /* 4. Global Primary Buttons Override */
+    button[kind="primary"] {
+        background-color: #003366 !important;
+        color: #ffffff !important;
+        border: 1px solid #002244 !important;
+    }
+    button[kind="primary"]:hover {
+        background-color: #002244 !important;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -292,7 +293,6 @@ def show_delete_account_dialog():
         
         col_d1, col_d2 = st.columns(2)
         
-        # Left Selected (Blue), Right Unselected (White)
         left_class = "btn-blue" if st.session_state['del_selected_btn'] == 'left' else "btn-white"
         right_class = "btn-blue" if st.session_state['del_selected_btn'] == 'right' else "btn-white"
 
@@ -324,9 +324,7 @@ def show_delete_account_dialog():
             del_password = st.text_input("Enter Account Password *", type="password")
             del_captcha = st.text_input(f"Question: What is {dn1} + {dn2} ? *")
             
-            st.markdown('<div class="blue-btn">', unsafe_allow_html=True)
             submit_del_verify = st.form_submit_button("Submit", use_container_width=True)
-            st.markdown('</div>', unsafe_allow_html=True)
 
         if submit_del_verify:
             if not del_id or not del_password or not del_captcha:
@@ -428,9 +426,7 @@ if not st.session_state['logged_in']:
             st.markdown("#### 🤖 Human Verification")
             login_captcha = st.text_input(f"Question: What is {l_n1} + {l_n2} ? *", placeholder="Enter sum answer")
 
-            st.markdown('<div class="blue-btn">', unsafe_allow_html=True)
-            submit_login = st.form_submit_button("Submit", type="primary")
-            st.markdown('</div>', unsafe_allow_html=True)
+            submit_login = st.form_submit_button("Submit")
 
         if submit_login:
             val_id = str(login_id).strip()
@@ -514,9 +510,7 @@ if not st.session_state['logged_in']:
             
             with st.form("otp_form"):
                 entered_otp = st.text_input("Enter 6-Digit OTP Code:", max_chars=6)
-                st.markdown('<div class="blue-btn">', unsafe_allow_html=True)
-                submit_otp = st.form_submit_button("Submit", type="primary")
-                st.markdown('</div>', unsafe_allow_html=True)
+                submit_otp = st.form_submit_button("Submit")
 
             if submit_otp:
                 otp_val = str(entered_otp).strip()
@@ -574,9 +568,7 @@ if not st.session_state['logged_in']:
                 captcha_input = st.text_input(f"Question: What is {s_n1} + {s_n2} ? *", placeholder="Enter sum answer")
                 logo_file = st.file_uploader("Upload Business Logo (PNG / JPG)", type=["png", "jpg", "jpeg"])
 
-                st.markdown('<div class="blue-btn">', unsafe_allow_html=True)
-                submit_signup = st.form_submit_button("Submit", type="primary")
-                st.markdown('</div>', unsafe_allow_html=True)
+                submit_signup = st.form_submit_button("Submit")
 
             if submit_signup:
                 email_clean = check_email.lower().strip()
@@ -628,7 +620,7 @@ if not st.session_state['logged_in']:
                         refresh_locked_captcha("signup")
                         st.rerun()
 
-# ------------------ DASHBOARD VIEW (ENTRIES FORM RESTORED) ------------------
+# ------------------ DASHBOARD VIEW ------------------
 else:
     biz_info = st.session_state['business_details']
     
@@ -660,7 +652,7 @@ else:
 
     st.divider()
 
-    # Smart Categorization Engine
+    # Categorization Rules
     CATEGORIES = {
         "Fuel & Automobile": ["shell", "pso", "total", "petrol", "fuel", "cng"],
         "Utilities": ["k-electric", "lesco", "fesco", "ptcl", "stormfiber", "sngpl", "bill"],
@@ -703,7 +695,7 @@ else:
             "timestamp": get_current_time().strftime("%Y-%m-%d %H:%M:%S")
         }
 
-    # RESTORED: SIDEBAR NEW LEDGER ENTRY FORM
+    # Sidebar Entry Form
     st.sidebar.header("📩 Add Live Transaction / SMS")
     with st.sidebar.form("add_entry_form"):
         user_sms = st.text_area("Paste SMS Text Here:", placeholder="e.g. Received Rs 5,000 from Ali Traders via EasyPaisa.")
@@ -711,9 +703,7 @@ else:
         custom_date = st.date_input("Transaction Date:", value=current_now.date())
         custom_time = st.time_input("Transaction Time:", value=current_now.time())
         
-        st.markdown('<div class="blue-btn">', unsafe_allow_html=True)
-        submit_entry = st.form_submit_button("Submit", type="primary")
-        st.markdown('</div>', unsafe_allow_html=True)
+        submit_entry = st.form_submit_button("Submit")
 
     if submit_entry:
         if user_sms.strip():
