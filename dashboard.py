@@ -256,25 +256,25 @@ if not st.session_state['logged_in']:
                 refresh_locked_captcha("login")
                 st.rerun()
 
-        # Dynamic State Evaluation for Instant Activation
-        val_id = st.session_state.get('login_id_input', login_id)
-        val_pw = st.session_state.get('login_pw_input', login_password)
-        val_cap = st.session_state.get('login_cap_input', login_captcha)
+        # Dynamic State Evaluation to ensure real-time button activation
+        val_id = str(st.session_state.get('login_id_input', login_id)).strip()
+        val_pw = str(st.session_state.get('login_pw_input', login_password)).strip()
+        val_cap = str(st.session_state.get('login_cap_input', login_captcha)).strip()
 
-        login_form_valid = bool(val_id and str(val_id).strip()) and bool(val_pw and str(val_pw).strip()) and bool(val_cap and str(val_cap).strip())
+        login_form_valid = bool(val_id) and bool(val_pw) and bool(val_cap)
 
         if not login_form_valid:
             st.info("💡 Please fill in your Login ID, Password, and Captcha answer to enable the Login button.")
 
-        # NO HELP PARAMETER HERE -> NO COMMENT/TOOLTIP UPON HOVER OR CLICK
-        submit_login = st.button("🔑 Login to Dashboard", type="primary", disabled=not login_form_valid)
+        # HOVER TOOLTIP SET TO "Submit" + FULLY FUNCTIONAL ENABLED STATE
+        submit_login = st.button("🔑 Login to Dashboard", type="primary", disabled=not login_form_valid, help="Submit")
 
         if submit_login:
-            if not str(val_cap).strip().isnumeric() or int(str(val_cap).strip()) != l_ans:
+            if not val_cap.isnumeric() or int(val_cap) != l_ans:
                 refresh_locked_captcha("login")
                 st.error("🚨 Incorrect Captcha answer! A new problem has been generated.")
             else:
-                login_clean = str(val_id).strip()
+                login_clean = val_id
                 target_email = ""
                 
                 if "@" in login_clean:
@@ -329,14 +329,13 @@ if not st.session_state['logged_in']:
             
             entered_otp = st.text_input("Enter 6-Digit OTP Code:", max_chars=6, key="otp_input_key")
             
-            otp_val = st.session_state.get('otp_input_key', entered_otp)
-            otp_valid = bool(otp_val and str(otp_val).strip())
+            otp_val = str(st.session_state.get('otp_input_key', entered_otp)).strip()
+            otp_valid = bool(otp_val)
             
-            # NO HELP PARAMETER HERE -> NO TOOLTIP COMMENT
-            submit_otp = st.button("✅ Verify OTP & Finalize Account", type="primary", disabled=not otp_valid)
+            submit_otp = st.button("✅ Verify OTP & Finalize Account", type="primary", disabled=not otp_valid, help="Submit")
             
             if submit_otp:
-                if str(otp_val).strip() == st.session_state['generated_otp']:
+                if otp_val == st.session_state['generated_otp']:
                     data = st.session_state['pending_user_data']
                     
                     db.collection('users').document(data['email']).set(data)
@@ -420,13 +419,13 @@ if not st.session_state['logged_in']:
             logo_file = st.file_uploader("Upload Business Logo (PNG / JPG)", type=["png", "jpg", "jpeg"])
 
             # Active Inputs Check
-            v_email = st.session_state.get('live_signup_email', check_email)
-            v_pw = st.session_state.get('signup_pw_key', password)
-            v_biz = st.session_state.get('signup_biz_key', biz_name)
-            v_phone = st.session_state.get('live_signup_phone', check_phone)
-            v_cap = st.session_state.get('signup_cap_key', captcha_input)
+            v_email = str(st.session_state.get('live_signup_email', check_email)).strip()
+            v_pw = str(st.session_state.get('signup_pw_key', password)).strip()
+            v_biz = str(st.session_state.get('signup_biz_key', biz_name)).strip()
+            v_phone = str(st.session_state.get('live_signup_phone', check_phone)).strip()
+            v_cap = str(st.session_state.get('signup_cap_key', captcha_input)).strip()
 
-            all_required_filled = bool(v_email and str(v_email).strip()) and bool(v_pw and str(v_pw).strip()) and bool(v_biz and str(v_biz).strip()) and bool(v_phone and str(v_phone).strip()) and bool(v_cap and str(v_cap).strip())
+            all_required_filled = bool(v_email) and bool(v_pw) and bool(v_biz) and bool(v_phone) and bool(v_cap)
             
             signup_button_disabled = (not all_required_filled) or email_already_taken or phone_already_taken
 
@@ -436,11 +435,12 @@ if not st.session_state['logged_in']:
                 elif not all_required_filled:
                     st.info("💡 Please fill in all required fields (*) to enable the verification button.")
 
-            # NO HELP PARAMETER HERE -> NO COMMENT/TOOLTIP UPON HOVER OR CLICK
+            # HOVER TOOLTIP SET TO "Submit"
             submit_signup = st.button(
                 "🚀 Verify & Create Account",
                 type="primary",
-                disabled=signup_button_disabled
+                disabled=signup_button_disabled,
+                help="Submit"
             )
 
             if submit_signup:
@@ -452,7 +452,7 @@ if not st.session_state['logged_in']:
                         st.error(f"🚨 Weak Password! {pw_msg}")
                     elif len(biz_name.strip()) < 3 or biz_name.strip().isnumeric():
                         st.error("🚨 Please enter a valid Business Name (at least 3 characters).")
-                    elif not str(v_cap).strip().isnumeric() or int(str(v_cap).strip()) != s_ans:
+                    elif not v_cap.isnumeric() or int(v_cap) != s_ans:
                         refresh_locked_captcha("signup")
                         st.error("🚨 Incorrect Captcha answer! A new problem has been generated.")
                     else:
