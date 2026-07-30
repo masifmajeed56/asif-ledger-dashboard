@@ -14,26 +14,45 @@ from google.oauth2 import service_account
 # Page Setup
 st.set_page_config(page_title="Asif Ledger Solutions", layout="wide")
 
-# Custom CSS for Office Blue Theme & Links
+# Custom CSS for Office Blue Theme, Button Hovers & Link Hovers
 st.markdown("""
 <style>
-    /* Active Office Blue Primary Button */
+    /* Primary / Selected Active Button */
     div.stButton > button[kind="primary"] {
         background-color: #003366 !important;
         color: #ffffff !important;
-        border-color: #002244 !important;
+        border: 1px solid #002244 !important;
         font-weight: bold;
+        transition: background-color 0.3s ease, border-color 0.3s ease, transform 0.1s ease;
     }
     
-    /* Secondary Inactive Buttons Styling */
+    /* Hover Effect for Primary Active Button */
+    div.stButton > button[kind="primary"]:hover {
+        background-color: #0056b3 !important;
+        border-color: #004085 !important;
+        color: #ffffff !important;
+        cursor: pointer;
+    }
+
+    /* Secondary / Inactive Buttons */
     div.stButton > button[kind="secondary"] {
         background-color: #f0f2f6 !important;
         color: #333333 !important;
         border: 1px solid #cccccc !important;
+        transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+    }
+
+    /* Hover Effect for Secondary Buttons (Changes to Blue on Hover) */
+    div.stButton > button[kind="secondary"]:hover {
+        background-color: #0056b3 !important;
+        color: #ffffff !important;
+        border-color: #004085 !important;
+        cursor: pointer;
     }
 
     /* Interactive Link Hover Effects */
     a {
+        color: #003366;
         text-decoration: none;
         transition: color 0.2s ease-in-out, text-decoration 0.2s ease-in-out;
     }
@@ -220,8 +239,8 @@ if not st.session_state['logged_in']:
                 refresh_locked_captcha("login")
                 st.rerun()
 
-        # Login Submit Button Disabling Logic (Active only when ALL fields filled)
-        login_form_valid = bool(login_id.strip()) and bool(login_password.strip()) and bool(login_captcha.strip())
+        # Login Submit Button Disabling Logic (Dynamic Live Active Check)
+        login_form_valid = bool(login_id and login_id.strip()) and bool(login_password and login_password.strip()) and bool(login_captcha and login_captcha.strip())
 
         if not login_form_valid:
             st.info("💡 Please fill in your Login ID, Password, and Captcha answer to enable the Login button.")
@@ -376,7 +395,7 @@ if not st.session_state['logged_in']:
             logo_file = st.file_uploader("Upload Business Logo (PNG / JPG)", type=["png", "jpg", "jpeg"])
 
             # 5. Smart Signup Submit Button Enabling Rules
-            all_required_filled = bool(check_email.strip()) and bool(password.strip()) and bool(biz_name.strip()) and bool(check_phone.strip()) and bool(captcha_input.strip())
+            all_required_filled = bool(check_email and check_email.strip()) and bool(password and password.strip()) and bool(biz_name and biz_name.strip()) and bool(check_phone and check_phone.strip()) and bool(captcha_input and captcha_input.strip())
             
             signup_button_disabled = (not all_required_filled) or email_already_taken or phone_already_taken
 
