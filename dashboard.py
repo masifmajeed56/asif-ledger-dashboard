@@ -14,46 +14,63 @@ from google.oauth2 import service_account
 # Page Setup
 st.set_page_config(page_title="Asif Ledger Solutions", layout="wide")
 
-# Custom CSS for Office Blue Theme, Button Hovers & Link Hovers
+# Force Override Streamlit's Default Red Theme with Office Blue
 st.markdown("""
 <style>
-    /* Primary / Selected Active Button */
+    /* Complete Red Theme Override for Primary Buttons */
+    button[kind="primary"],
+    .stButton > button[data-testid="baseButton-primary"],
     div.stButton > button[kind="primary"] {
         background-color: #003366 !important;
         color: #ffffff !important;
-        border: 1px solid #002244 !important;
-        font-weight: bold;
-        transition: background-color 0.3s ease, border-color 0.3s ease, transform 0.1s ease;
-    }
-    
-    /* Hover Effect for Primary Active Button */
-    div.stButton > button[kind="primary"]:hover {
-        background-color: #0056b3 !important;
-        border-color: #004085 !important;
-        color: #ffffff !important;
-        cursor: pointer;
+        border-color: #002244 !important;
+        background-image: none !important;
+        font-weight: bold !important;
     }
 
-    /* Secondary / Inactive Buttons */
+    /* Primary Button Hover State */
+    button[kind="primary"]:hover,
+    .stButton > button[data-testid="baseButton-primary"]:hover,
+    div.stButton > button[kind="primary"]:hover {
+        background-color: #0056b3 !important;
+        color: #ffffff !important;
+        border-color: #004085 !important;
+        cursor: pointer !important;
+    }
+
+    /* Secondary Inactive Buttons Styling */
+    button[kind="secondary"],
+    .stButton > button[data-testid="baseButton-secondary"],
     div.stButton > button[kind="secondary"] {
         background-color: #f0f2f6 !important;
         color: #333333 !important;
         border: 1px solid #cccccc !important;
-        transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
     }
 
-    /* Hover Effect for Secondary Buttons (Changes to Blue on Hover) */
+    /* Secondary Button Hover State */
+    button[kind="secondary"]:hover,
+    .stButton > button[data-testid="baseButton-secondary"]:hover,
     div.stButton > button[kind="secondary"]:hover {
         background-color: #0056b3 !important;
         color: #ffffff !important;
         border-color: #004085 !important;
-        cursor: pointer;
+        cursor: pointer !important;
+    }
+
+    /* Disabled Button Styling */
+    button:disabled,
+    button[disabled],
+    .stButton > button:disabled {
+        background-color: #e0e0e0 !important;
+        color: #888888 !important;
+        border-color: #cccccc !important;
+        cursor: not-allowed !important;
     }
 
     /* Interactive Link Hover Effects */
     a {
-        color: #003366;
-        text-decoration: none;
+        color: #003366 !important;
+        text-decoration: none !important;
         transition: color 0.2s ease-in-out, text-decoration 0.2s ease-in-out;
     }
     a:hover {
@@ -227,7 +244,7 @@ if not st.session_state['logged_in']:
         login_id = st.text_input("Username (@handle), Email, or Phone Number", value=preset_login, placeholder="e.g. user_handle, name@email.com, or +923001234567", key="login_id_input")
         login_password = st.text_input("Password", type="password", value=preset_password, key="login_pw_input")
 
-        # Captcha Field with Integrated Reload Icon
+        # Captcha Field
         st.markdown("#### 🤖 Human Verification")
         c_col1, c_col2 = st.columns([4, 1])
         with c_col1:
@@ -239,8 +256,12 @@ if not st.session_state['logged_in']:
                 refresh_locked_captcha("login")
                 st.rerun()
 
-        # Login Submit Button Disabling Logic (Dynamic Live Active Check)
-        login_form_valid = bool(login_id and login_id.strip()) and bool(login_password and login_password.strip()) and bool(login_captcha and login_captcha.strip())
+        # Dynamic State Evaluation to Ensure Button Enables Instantly
+        val_id = st.session_state.get('login_id_input', login_id)
+        val_pw = st.session_state.get('login_pw_input', login_password)
+        val_cap = st.session_state.get('login_cap_input', login_captcha)
+
+        login_form_valid = bool(val_id and str(val_id).strip()) and bool(val_pw and str(val_pw).strip()) and bool(val_cap and str(val_cap).strip())
 
         if not login_form_valid:
             st.info("💡 Please fill in your Login ID, Password, and Captcha answer to enable the Login button.")
@@ -248,11 +269,11 @@ if not st.session_state['logged_in']:
         submit_login = st.button("🔑 Login to Dashboard", type="primary", disabled=not login_form_valid, help="Authenticate credentials and access your dashboard")
 
         if submit_login:
-            if not login_captcha.strip().isnumeric() or int(login_captcha.strip()) != l_ans:
+            if not str(val_cap).strip().isnumeric() or int(str(val_cap).strip()) != l_ans:
                 refresh_locked_captcha("login")
                 st.error("🚨 Incorrect Captcha answer! A new problem has been generated.")
             else:
-                login_clean = login_id.strip()
+                login_clean = str(val_id).strip()
                 target_email = ""
                 
                 if "@" in login_clean:
@@ -275,7 +296,7 @@ if not st.session_state['logged_in']:
                     user_doc = db.collection('users').document(target_email).get()
                     if user_doc.exists:
                         user_data = user_doc.to_dict()
-                        if user_data['password'] == make_hash(login_password):
+                        if user_data['password'] == make_hash(val_pw):
                             st.session_state['logged_in'] = True
                             st.session_state['user_email'] = target_email
                             st.session_state['business_id'] = target_email
@@ -284,7 +305,7 @@ if not st.session_state['logged_in']:
                             account_label = f"{user_data.get('business_name', 'Business')} (@{user_data.get('username', 'user')})"
                             st.session_state['saved_accounts_dict'][account_label] = {
                                 "login": target_email,
-                                "password": login_password
+                                "password": val_pw
                             }
                             refresh_locked_captcha("login")
                             st.success("Login Successful!")
@@ -305,13 +326,15 @@ if not st.session_state['logged_in']:
             st.info(f"An OTP Verification code was dispatched for **{st.session_state['pending_user_data']['email']}**.")
             st.success(f"🔑 Secret OTP Code: **{st.session_state['generated_otp']}**")
             
-            entered_otp = st.text_input("Enter 6-Digit OTP Code:", max_chars=6)
+            entered_otp = st.text_input("Enter 6-Digit OTP Code:", max_chars=6, key="otp_input_key")
             
-            otp_valid = bool(entered_otp.strip())
+            otp_val = st.session_state.get('otp_input_key', entered_otp)
+            otp_valid = bool(otp_val and str(otp_val).strip())
+            
             submit_otp = st.button("✅ Verify OTP & Finalize Account", type="primary", disabled=not otp_valid, help="Verify code to complete registration")
             
             if submit_otp:
-                if entered_otp.strip() == st.session_state['generated_otp']:
+                if str(otp_val).strip() == st.session_state['generated_otp']:
                     data = st.session_state['pending_user_data']
                     
                     db.collection('users').document(data['email']).set(data)
@@ -373,18 +396,18 @@ if not st.session_state['logged_in']:
             grid_c1, grid_c2 = st.columns(2)
             
             with grid_c1:
-                password = st.text_input("Unique Password *", type="password", placeholder="8+ chars, Uppercase, Number & Symbol")
-                biz_name = st.text_input("Business Name *", placeholder="e.g. Ali Traders, Bismillah Pharmacy")
+                password = st.text_input("Unique Password *", type="password", placeholder="8+ chars, Uppercase, Number & Symbol", key="signup_pw_key")
+                biz_name = st.text_input("Business Name *", placeholder="e.g. Ali Traders, Bismillah Pharmacy", key="signup_biz_key")
 
             with grid_c2:
-                username_input = st.text_input("Choose Unique Username / Handle (Optional)", placeholder="Auto-generated if left empty")
+                username_input = st.text_input("Choose Unique Username / Handle (Optional)", placeholder="Auto-generated if left empty", key="signup_user_key")
                 biz_type = st.selectbox("Business Category", ["Grocery Store", "Medical Store / Pharmacy", "General Store", "Services / Consulting", "Wholesale", "Other"])
 
             # 4. Math Captcha Section
             st.markdown("#### 🤖 Human Verification")
             sc_col1, sc_col2 = st.columns([4, 1])
             with sc_col1:
-                captcha_input = st.text_input(f"Question: What is {s_n1} + {s_n2} ? *", placeholder="Enter sum answer")
+                captcha_input = st.text_input(f"Question: What is {s_n1} + {s_n2} ? *", placeholder="Enter sum answer", key="signup_cap_key")
             with sc_col2:
                 st.write(" ")
                 st.write(" ")
@@ -394,8 +417,14 @@ if not st.session_state['logged_in']:
 
             logo_file = st.file_uploader("Upload Business Logo (PNG / JPG)", type=["png", "jpg", "jpeg"])
 
-            # 5. Smart Signup Submit Button Enabling Rules
-            all_required_filled = bool(check_email and check_email.strip()) and bool(password and password.strip()) and bool(biz_name and biz_name.strip()) and bool(check_phone and check_phone.strip()) and bool(captcha_input and captcha_input.strip())
+            # Active Inputs Check
+            v_email = st.session_state.get('live_signup_email', check_email)
+            v_pw = st.session_state.get('signup_pw_key', password)
+            v_biz = st.session_state.get('signup_biz_key', biz_name)
+            v_phone = st.session_state.get('live_signup_phone', check_phone)
+            v_cap = st.session_state.get('signup_cap_key', captcha_input)
+
+            all_required_filled = bool(v_email and str(v_email).strip()) and bool(v_pw and str(v_pw).strip()) and bool(v_biz and str(v_biz).strip()) and bool(v_phone and str(v_phone).strip()) and bool(v_cap and str(v_cap).strip())
             
             signup_button_disabled = (not all_required_filled) or email_already_taken or phone_already_taken
 
@@ -421,7 +450,7 @@ if not st.session_state['logged_in']:
                         st.error(f"🚨 Weak Password! {pw_msg}")
                     elif len(biz_name.strip()) < 3 or biz_name.strip().isnumeric():
                         st.error("🚨 Please enter a valid Business Name (at least 3 characters).")
-                    elif not captcha_input.strip().isnumeric() or int(captcha_input.strip()) != s_ans:
+                    elif not str(v_cap).strip().isnumeric() or int(str(v_cap).strip()) != s_ans:
                         refresh_locked_captcha("signup")
                         st.error("🚨 Incorrect Captcha answer! A new problem has been generated.")
                     else:
