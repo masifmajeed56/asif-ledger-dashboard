@@ -68,21 +68,23 @@ def validate_password_strength(password):
     if len(password) < 8:
         return False, "Password must be at least 8 characters long."
     if not re.search(r"[A-Z]", password):
-        return False, "Must contain at least one uppercase letter (A-Z)."
+        return False, "Password must contain at least one uppercase letter (A-Z)."
     if not re.search(r"[a-z]", password):
-        return False, "Must contain at least one lowercase letter (a-z)."
+        return False, "Password must contain at least one lowercase letter (a-z)."
     if not re.search(r"[0-9]", password):
-        return False, "Must contain at least one digit (0-9)."
+        return False, "Password must contain at least one digit (0-9)."
     if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
-        return False, "Must contain at least one special character (!@#$%^&*)."
+        return False, "Password must contain at least one special character (!@#$%^&*)."
     return True, "Strong Password"
 
 def validate_email_format(email):
     pattern = r"^[\w\.-]+@[\w\.-]+\.\w+$"
     return re.match(pattern, email) is not None
 
-def generate_username_suggestions(base_username):
-    cleaned = re.sub(r'[^a-zA-Z0-9_]', '', base_username.lower())
+def generate_username_suggestions(base_text):
+    cleaned = re.sub(r'[^a-zA-Z0-9_]', '', base_text.lower().replace(" ", "_"))
+    if not cleaned:
+        cleaned = "biz_ledger"
     suggestions = [f"{cleaned}_pk", f"{cleaned}_official", f"{cleaned}_store", f"{cleaned}123", f"{cleaned}_ledger"]
     available = []
     for sug in suggestions:
@@ -93,7 +95,7 @@ def generate_username_suggestions(base_username):
             break
     return available
 
-# Session State
+# Session State Initializations
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 if 'user_email' not in st.session_state:
@@ -110,6 +112,36 @@ if 'generated_otp' not in st.session_state:
     st.session_state['generated_otp'] = ""
 if 'pending_user_data' not in st.session_state:
     st.session_state['pending_user_data'] = {}
+if 'selected_username' not in st.session_state:
+    st.session_state['selected_username'] = ""
+if 'saved_accounts' not in st.session_state:
+    st.session_state['saved_accounts'] = []
+if 'popup_error' not in st.session_state:
+    st.session_state['popup_error'] = ""
+
+# Captcha Generator Function
+def generate_math_captcha(key_prefix):
+    if f"{key_prefix}_num1" not in st.session_state:
+        st.session_state[f"{key_prefix}_num1"] = random.randint(5, 20)
+        st.session_state[f"{key_prefix}_num2"] = random.randint(1, 10)
+    num1 = st.session_state[f"{key_prefix}_num1"]
+    num2 = st.session_state[f"{key_prefix}_num2"]
+    return num1, num2, num1 + num2
+
+def refresh_math_captcha(key_prefix):
+    st.session_state[f"{key_prefix}_num1"] = random.randint(5, 20)
+    st.session_state[f"{key_prefix}_num2"] = random.randint(1, 10)
+
+# Popup Dialog for Error Notifications
+@st.dialog("⚠️ Validation Alert")
+def show_error_dialog(message, offer_login=False):
+    st.error(message)
+    if offer_login:
+        if st.button("👉 Switch to Login Mode Now"):
+            st.session_state['auth_mode'] = "Login"
+            st.rerun()
+    if st.button("Close"):
+        st.rerun()
 
 # ------------------ SCREEN 1: LOGIN & SIGNUP WITH OTP ------------------
 if not st.session_state['logged_in']:
@@ -126,28 +158,31 @@ if not st.session_state['logged_in']:
     st.session_state['auth_mode'] = selected_mode
     st.divider()
 
-    col_auth, _ = st.columns([2, 1])
+    # Dynamic Popup Trigger
+    if st.session_state['popup_error']:
+        err_msg = st.session_state['popup_error']
+        st.session_state['popup_error'] = ""
+        offer = "already exists" in err_msg.lower()
+        show_error_dialog(err_msg, offer_login=offer)
+
+    col_main, _ = st.columns([2.2, 0.8])
     
-    with col_auth:
+    with col_main:
         if st.session_state['auth_mode'] == "Sign Up (Create New Business Account)":
             
             # OTP VERIFICATION STEP WINDOW
             if st.session_state['otp_step']:
                 st.markdown("### 🔐 Verify OTP Security Code")
                 st.info(f"An OTP Verification code was dispatched for **{st.session_state['pending_user_data']['email']}**.")
-                
-                # Display Demo OTP Badge for instant testing
                 st.success(f"🔑 Secret OTP Code: **{st.session_state['generated_otp']}**")
                 
-                entered_otp = st.text_input("Enter 6-Digit OTP Code:", max_chars=6)
-                
-                col_v1, col_v2 = st.columns(2)
-                with col_v1:
-                    if st.button("✅ Verify OTP & Finalize Account"):
+                with st.form(key="otp_form"):
+                    entered_otp = st.text_input("Enter 6-Digit OTP Code:", max_chars=6)
+                    submit_otp = st.form_submit_button("✅ Verify OTP & Finalize Account")
+                    
+                    if submit_otp:
                         if entered_otp.strip() == st.session_state['generated_otp']:
                             data = st.session_state['pending_user_data']
-                            
-                            # Save to Firebase
                             db.collection('users').document(data['email']).set(data)
                             db.collection('usernames').document(data['username']).set({"email": data['email']})
                             
@@ -156,149 +191,168 @@ if not st.session_state['logged_in']:
                             st.session_state['pending_user_data'] = {}
                             
                             st.success("🎉 Account Verified & Created Successfully!")
-                            if st.button("👉 Click here to Go to Login Page"):
-                                st.session_state['auth_mode'] = "Login"
-                                st.rerun()
                         else:
-                            st.error("❌ Invalid OTP Code. Please re-check and enter again.")
-                with col_v2:
-                    if st.button("❌ Cancel / Back"):
-                        st.session_state['otp_step'] = False
-                        st.rerun()
+                            st.session_state['popup_error'] = "Invalid OTP Code. Please re-check and enter again."
+                            st.rerun()
+
+                st.markdown("---")
+                if st.button("👉 Go to Login Screen"):
+                    st.session_state['auth_mode'] = "Login"
+                    st.rerun()
 
             # SIGNUP FORM STEP
             else:
                 st.markdown("### 📝 Register Your Business Account")
                 
-                # 1. Email with Immediate Inline Validation
-                email = st.text_input("User Email Address *")
-                email_clean = email.lower().strip()
-                email_valid = False
-                if email_clean:
-                    if not validate_email_format(email_clean):
-                        st.caption("❌ Invalid email format (e.g. name@domain.com).")
-                    else:
-                        user_ref = db.collection('users').document(email_clean).get()
-                        if user_ref.exists:
-                            st.caption("❌ An account already exists with this email!")
-                        else:
-                            st.caption("✅ Email format valid and available.")
-                            email_valid = True
+                with st.form(key="signup_form"):
+                    # PC Grid View (2 Columns) / Mobile Stacked
+                    grid_c1, grid_c2 = st.columns(2)
+                    
+                    with grid_c1:
+                        email = st.text_input("User Email Address *", placeholder="name@domain.com")
+                        password = st.text_input("Unique Password *", type="password", placeholder="8+ chars, Uppercase, Number & Symbol")
+                        biz_name = st.text_input("Business Name *", placeholder="e.g. Ali Traders, Bismillah Pharmacy")
+                    
+                    with grid_c2:
+                        username_input = st.text_input("Choose Unique Username / Handle (Optional)", value=st.session_state['selected_username'], placeholder="Auto-generated if left empty")
+                        biz_type = st.selectbox("Business Category", ["Grocery Store", "Medical Store / Pharmacy", "General Store", "Services / Consulting", "Wholesale", "Other"])
+                        selected_country_key = st.selectbox("Select Country *", list(COUNTRY_RULES.keys()))
 
-                # 2. Password with Immediate Inline Validation
-                password = st.text_input("Unique Password *", type="password", help="8+ characters, Uppercase, Lowercase, Number & Special symbol required.")
-                pw_valid = False
-                if password:
+                    rule = COUNTRY_RULES[selected_country_key]
+                    phone_num = st.text_input("Mobile / WhatsApp Number *", placeholder=f"Format: {rule['mask']}")
+                    
+                    # Math Captcha
+                    st.markdown("#### 🤖 Human Verification")
+                    n1, n2, ans = generate_math_captcha("signup")
+                    captcha_input = st.text_input(f"Security Question: What is {n1} + {n2} ? *", placeholder="Enter answer")
+
+                    logo_file = st.file_uploader("Upload Business Logo (PNG / JPG)", type=["png", "jpg", "jpeg"])
+
+                    submit_signup = st.form_submit_button("🚀 Verify & Create Account")
+
+                # Handle Clickable Username Suggestions Outside Form
+                if username_input:
+                    u_clean = re.sub(r'[^a-zA-Z0-9_]', '', username_input.lower().strip())
+                    if u_clean:
+                        u_doc = db.collection('usernames').document(u_clean).get()
+                        if u_doc.exists:
+                            st.warning(f"⚠️ Handle '@{u_clean}' is already taken! Click a suggestion below:")
+                            sugs = generate_username_suggestions(u_clean)
+                            s_cols = st.columns(len(sugs))
+                            for idx, sug in enumerate(sugs):
+                                if s_cols[idx].button(f"@{sug}"):
+                                    st.session_state['selected_username'] = sug
+                                    st.rerun()
+
+                if submit_signup:
+                    email_clean = email.lower().strip()
+                    clean_phone = re.sub(r'\D', '', phone_num)
+                    
+                    # 1. Email Check
+                    if not validate_email_format(email_clean):
+                        st.session_state['popup_error'] = "Invalid Email Address format! Please enter a valid email (e.g. name@domain.com)."
+                        st.rerun()
+                    
+                    user_ref = db.collection('users').document(email_clean).get()
+                    if user_ref.exists:
+                        st.session_state['popup_error'] = f"An account already exists with email '{email_clean}'! Please switch to Login mode."
+                        st.rerun()
+
+                    # 2. Password Check
                     is_pw_strong, pw_msg = validate_password_strength(password)
                     if not is_pw_strong:
-                        st.caption(f"❌ {pw_msg}")
-                    else:
-                        st.caption("✅ Strong password.")
-                        pw_valid = True
-
-                st.markdown("---")
-                st.markdown("#### 🏢 Business Details & Custom Username")
-                
-                # 3. Business Name (Non-Unique Clarification)
-                biz_name = st.text_input("Business Name * (e.g. Ali Traders, Bismillah Pharmacy)", help="Multiple businesses can have the same business name.")
-                if biz_name.strip():
-                    st.caption("ℹ️ Note: Business name does not need to be unique.")
-
-                # 4. Unique Username (Asked AFTER Business Name)
-                desired_username = st.text_input("Choose Unique Business Username / Handle * (e.g. asifledger, ali_store)", help="Unique system identifier for login and branding.")
-                username_clean = re.sub(r'[^a-zA-Z0-9_]', '', desired_username.lower().strip()) if desired_username else ""
-                username_valid = False
-                
-                if username_clean:
-                    u_doc = db.collection('usernames').document(username_clean).get()
-                    if u_doc.exists:
-                        st.caption(f"❌ Username '@{username_clean}' is already taken!")
-                        sugs = generate_username_suggestions(username_clean)
-                        if sugs:
-                            st.caption(f"💡 Try these available handles: {', '.join(sugs)}")
-                    else:
-                        st.caption(f"✅ Unique Username '@{username_clean}' is available!")
-                        username_valid = True
-
-                biz_type = st.selectbox("Business Category / Type", ["Grocery Store", "Medical Store / Pharmacy", "General Store", "Services / Consulting", "Wholesale", "Other"])
-
-                # 5. Country Code & Dynamic Mask Phone Validation
-                st.markdown("#### 📞 Contact & Branding")
-                col_cc, col_phone = st.columns([1.5, 2.5])
-                
-                with col_cc:
-                    selected_country_key = st.selectbox("Select Country *", list(COUNTRY_RULES.keys()))
-                
-                rule = COUNTRY_RULES[selected_country_key]
-                
-                with col_phone:
-                    phone_num = st.text_input(f"Mobile / WhatsApp Number *", placeholder=f"Required Format: {rule['mask']}")
-                
-                clean_phone = re.sub(r'\D', '', phone_num)
-                phone_valid = False
-                
-                if phone_num:
-                    if re.match(rule['regex'], clean_phone):
-                        st.caption(f"✅ Valid phone number ({rule['code']} {clean_phone}).")
-                        phone_valid = True
-                    else:
-                        st.caption(f"❌ Invalid number! Required Format: **{rule['mask']}**")
-
-                logo_file = st.file_uploader("Upload Business Logo (PNG / JPG)", type=["png", "jpg", "jpeg"])
-
-                # Submit Button
-                st.markdown("---")
-                if st.button("🚀 Verify & Create Account"):
-                    if not email_valid:
-                        st.error("Please provide a valid and unique email address.")
-                    elif not pw_valid:
-                        st.error("Please provide a strong password meeting all criteria.")
-                    elif not biz_name.strip():
-                        st.error("Please enter your Business Name.")
-                    elif not username_valid:
-                        st.error("Please select a valid and available unique username.")
-                    elif not phone_valid:
-                        st.error(f"Please enter mobile number in correct format: {rule['mask']}")
-                    else:
-                        # Convert logo if uploaded
-                        logo_data_str = ""
-                        if logo_file is not None:
-                            logo_data_str = logo_file.getvalue().hex()
-
-                        # Generate 6-Digit OTP Code
-                        generated_code = str(random.randint(100000, 999999))
-                        
-                        st.session_state['pending_user_data'] = {
-                            "username": username_clean,
-                            "email": email_clean,
-                            "password": make_hash(password),
-                            "business_name": biz_name.strip(),
-                            "business_type": biz_type,
-                            "phone": f"{rule['code']} {clean_phone}",
-                            "logo_hex": logo_data_str,
-                            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                        }
-                        
-                        st.session_state['generated_otp'] = generated_code
-                        st.session_state['otp_step'] = True
+                        st.session_state['popup_error'] = f"Weak Password! {pw_msg}"
                         st.rerun()
+
+                    # 3. Business Name Check
+                    if len(biz_name.strip()) < 3 or biz_name.strip().isnumeric():
+                        st.session_state['popup_error'] = "Please enter a valid Business Name (at least 3 characters)."
+                        st.rerun()
+
+                    # 4. Username Auto-Generation or Check
+                    final_username = re.sub(r'[^a-zA-Z0-9_]', '', username_input.lower().strip())
+                    if not final_username:
+                        auto_sugs = generate_username_suggestions(biz_name if biz_name else email_clean)
+                        final_username = auto_sugs[0] if auto_sugs else "biz_ledger_account"
+                    else:
+                        u_doc = db.collection('usernames').document(final_username).get()
+                        if u_doc.exists:
+                            st.session_state['popup_error'] = f"Username '@{final_username}' is already taken. Please pick another or click a suggestion."
+                            st.rerun()
+
+                    # 5. Phone Check
+                    if not re.match(rule['regex'], clean_phone):
+                        st.session_state['popup_error'] = f"Invalid number! Required Format: {rule['mask']}"
+                        st.rerun()
+
+                    # 6. Captcha Check
+                    if not captcha_input.strip().isnumeric() or int(captcha_input.strip()) != ans:
+                        refresh_math_captcha("signup")
+                        st.session_state['popup_error'] = "Incorrect Captcha answer! Please try the new math problem."
+                        st.rerun()
+
+                    # Logo Process
+                    logo_data_str = logo_file.getvalue().hex() if logo_file is not None else ""
+
+                    # Save Temporary Data and Open OTP
+                    generated_code = str(random.randint(100000, 999999))
+                    st.session_state['pending_user_data'] = {
+                        "username": final_username,
+                        "email": email_clean,
+                        "password": make_hash(password),
+                        "business_name": biz_name.strip(),
+                        "business_type": biz_type,
+                        "phone": f"{rule['code']} {clean_phone}",
+                        "logo_hex": logo_data_str,
+                        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    }
+                    st.session_state['generated_otp'] = generated_code
+                    st.session_state['otp_step'] = True
+                    st.rerun()
+
+                st.markdown("---")
+                if st.button("👉 Already have an account? Click here to Login"):
+                    st.session_state['auth_mode'] = "Login"
+                    st.rerun()
 
         elif st.session_state['auth_mode'] == "Login":
             st.markdown("### 🔑 Client Login")
-            login_id = st.text_input("Username (@handle) or Email Address")
-            login_password = st.text_input("Password", type="password")
             
-            if st.button("Login to Dashboard"):
-                if login_id and login_password:
-                    login_clean = login_id.lower().strip()
+            # Saved Accounts Quick Picker
+            if st.session_state['saved_accounts']:
+                selected_acc = st.selectbox("💡 Quick Select Saved Account:", ["-- Select Saved Account --"] + st.session_state['saved_accounts'])
+                if selected_acc != "-- Select Saved Account --":
+                    st.session_state['preset_login_id'] = selected_acc
+            
+            preset_id = st.session_state.get('preset_login_id', '')
+
+            with st.form(key="login_form"):
+                login_id = st.text_input("Username (@handle) or Email Address", value=preset_id)
+                login_password = st.text_input("Password", type="password")
+                
+                # Math Captcha for Login
+                st.markdown("#### 🤖 Security Check")
+                n1, n2, ans = generate_math_captcha("login")
+                login_captcha = st.text_input(f"What is {n1} + {n2} ? *", placeholder="Enter answer")
+
+                submit_login = st.form_submit_button("Login to Dashboard")
+
+            if submit_login:
+                login_clean = login_id.lower().strip()
+                
+                if not login_captcha.strip().isnumeric() or int(login_captcha.strip()) != ans:
+                    refresh_math_captcha("login")
+                    st.session_state['popup_error'] = "Incorrect Captcha answer! Please solve the new problem."
+                    st.rerun()
+
+                if login_clean and login_password:
                     target_email = login_clean
-                    
                     if "@" not in login_clean:
                         u_doc = db.collection('usernames').document(login_clean).get()
                         if u_doc.exists:
                             target_email = u_doc.to_dict().get("email", "")
                         else:
-                            st.caption("❌ Username handle not found.")
+                            st.session_state['popup_error'] = "Username handle not found!"
                             target_email = ""
 
                     if target_email:
@@ -310,14 +364,23 @@ if not st.session_state['logged_in']:
                                 st.session_state['user_email'] = target_email
                                 st.session_state['business_id'] = target_email
                                 st.session_state['business_details'] = user_data
+                                
+                                # Save account to recent list
+                                handle = user_data.get('username', target_email)
+                                if handle not in st.session_state['saved_accounts']:
+                                    st.session_state['saved_accounts'].append(handle)
+
                                 st.success("Login Successful!")
                                 st.rerun()
                             else:
-                                st.caption("❌ Incorrect Password.")
+                                st.session_state['popup_error'] = "Incorrect Password! Please try again."
+                                st.rerun()
                         else:
-                            st.caption("❌ User Account not found.")
+                            st.session_state['popup_error'] = "User Account not found!"
+                            st.rerun()
                 else:
-                    st.warning("Please fill in both fields.")
+                    st.session_state['popup_error'] = "Please fill in all required fields."
+                    st.rerun()
 
 # ------------------ SCREEN 2: DASHBOARD & BRANDED LEDGER ------------------
 else:
@@ -415,11 +478,14 @@ else:
 
     df = load_data()
 
+    # Sidebar SMS Entry with Auto Live Date & Time
     st.sidebar.header("📩 Add Live SMS Transaction")
     user_sms = st.sidebar.text_area("Paste SMS Text Here:", placeholder="Received Rs 5,000 from Ali Traders via EasyPaisa.")
     
-    custom_date = st.sidebar.date_input("Transaction Date:", value=datetime.now().date())
-    custom_time = st.sidebar.time_input("Transaction Time:", value=datetime.now().time())
+    # Auto Live Date & Time
+    now = datetime.now()
+    custom_date = st.sidebar.date_input("Transaction Date:", value=now.date())
+    custom_time = st.sidebar.time_input("Transaction Time:", value=now.time())
     entry_timestamp = datetime.combine(custom_date, custom_time).strftime("%Y-%m-%d %H:%M:%S")
 
     if st.sidebar.button("Process & Save Transaction"):
