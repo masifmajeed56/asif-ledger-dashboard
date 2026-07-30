@@ -87,10 +87,10 @@ if 'reactivate_prompt' not in st.session_state:
 if 'pending_login_data' not in st.session_state:
     st.session_state['pending_login_data'] = {}
 
-# NATIVE CSS OVERRIDES (STRICT LINK HOVER BLUE & BUTTON STYLING)
+# NATIVE CSS OVERRIDES (STRICT LINK & TAB HOVER BLUE)
 st.markdown("""
 <style>
-    /* 1. STRICT PURE BLUE LINK HOVER OVERRIDE (TARGETING STREAMLIT CONTAINERS) */
+    /* 1. STRICT PURE BLUE LINK HOVER OVERRIDE */
     a, a:link, a:visited, 
     .stMarkdown a, 
     div[data-testid="stMarkdownContainer"] a {
@@ -107,7 +107,20 @@ st.markdown("""
         font-weight: bold !important;
     }
 
-    /* 2. PRIMARY BUTTONS */
+    /* 2. DASHBOARD TABS HOVER EFFECT OVERRIDE (TEAM MANAGE, CHART OF ACCOUNTS, ETC.) */
+    button[data-baseweb="tab"] {
+        transition: all 0.2s ease-in-out !important;
+    }
+    
+    button[data-baseweb="tab"]:hover,
+    button[data-baseweb="tab"]:hover p,
+    button[data-baseweb="tab"]:hover div,
+    button[data-baseweb="tab"]:hover span {
+        color: #0000FF !important; /* Pure Blue Hover Color */
+        font-weight: bold !important;
+    }
+
+    /* 3. PRIMARY BUTTONS */
     button[kind="primary"],
     div[data-testid="stFormSubmitButton"] > button {
         background-color: #003366 !important;
@@ -125,7 +138,7 @@ st.markdown("""
         box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.25) !important;
     }
 
-    /* 3. SECONDARY BUTTONS */
+    /* 4. SECONDARY BUTTONS */
     button[kind="secondary"] {
         background-color: #ffffff !important;
         color: #003366 !important;
@@ -695,7 +708,7 @@ if not st.session_state['logged_in']:
                             "email": email_clean,
                             "password_raw": password,
                             "password": make_hash(password),
-                            "business_name": biz_name.strip().title(), # Capitalize business name
+                            "business_name": biz_name.strip().title(),
                             "business_type": biz_type,
                             "phone": f"+{extracted_code} {phone_clean}",
                             "phone_raw": formatted_phone_key,
@@ -761,7 +774,6 @@ else:
 
     # STRICT PARSER: RUPEES VS DATE SAFEGUARD & MERCHANT NAME FIX WITH TITLE CASE
     def parse_sms_logic(sms_text, custom_merchant_name=""):
-        # Explicit Regex matching Currency terms (Rs, PKR, INR, $)
         amount_match = re.search(r'(?:Rs\.?|INR|PKR|\$)\s*([\d,]+(?:\.\d{1,2})?)', sms_text, re.IGNORECASE)
         
         if amount_match:
@@ -780,7 +792,7 @@ else:
         if not merchant:
             merchant = "Direct Customer / Merchant"
 
-        # AUTOMATIC FIRST LETTER CAPITALIZATION FOR CUSTOMER / PARTY NAME
+        # AUTOMATIC FIRST LETTER CAPITALIZATION FOR EVERY WORD
         merchant = merchant.title()
 
         method_match = re.search(r'(?:via|using|through)\s+([A-Za-z0-9\s]+?)(?=\s+(?:on|dated|ref|\.|$))', sms_text, re.IGNORECASE)
@@ -794,7 +806,7 @@ else:
             "entered_by_role": role,
             "raw_sms": sms_text,
             "amount": amount,
-            "merchant": merchant, # Title Case Applied Here
+            "merchant": merchant,
             "payment_method": payment_method,
             "type": "Debit" if is_debit else "Credit",
             "category": cat,
@@ -804,7 +816,9 @@ else:
 
     st.sidebar.header("📩 Add Live Transaction / SMS")
     with st.sidebar.form("add_entry_form"):
+        # CUSTOMER / PARTY NAME FIELD WITH AUTO TITLE-CASE FUNCTION
         merchant_input = st.text_input("Customer / Party Name *", placeholder="e.g. Ali Traders, Kashif")
+        
         user_sms = st.text_area("Paste SMS / Payment Note *", placeholder="e.g. Received Rs 5,000 via EasyPaisa or Paid Rs 2500")
         current_now = get_current_time()
         custom_date = st.date_input("Transaction Date:", value=current_now.date())
@@ -814,8 +828,11 @@ else:
 
     if submit_entry:
         if user_sms.strip():
+            # CAPITALIZING CUSTOMER NAME (FIRST LETTER OF EVERY WORD)
+            formatted_merchant = merchant_input.strip().title()
+            
             entry_timestamp = datetime.combine(custom_date, custom_time).strftime("%Y-%m-%d %H:%M:%S")
-            parsed_record = parse_sms_logic(user_sms, merchant_input)
+            parsed_record = parse_sms_logic(user_sms, formatted_merchant)
             parsed_record["timestamp"] = entry_timestamp
             
             db.collection('transactions').add(parsed_record)
@@ -831,7 +848,6 @@ else:
             d = doc.to_dict()
             if "timestamp" not in d or not d["timestamp"]:
                 d["timestamp"] = get_current_time().strftime("%Y-%m-%d %H:%M:%S")
-            # Ensure Title Case even for historical entries
             if "merchant" in d and d["merchant"]:
                 d["merchant"] = str(d["merchant"]).title()
             data.append(d)
