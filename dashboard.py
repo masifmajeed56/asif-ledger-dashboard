@@ -211,12 +211,12 @@ if not st.session_state['logged_in']:
     col_w1, col_w2, _ = st.columns([1, 1, 2])
     with col_w1:
         is_login = st.session_state['active_window'] == "Login Window"
-        if st.button("Login", use_container_width=True, type="primary" if is_login else "secondary", help="Click to access your existing account dashboard"):
+        if st.button("Login", use_container_width=True, type="primary" if is_login else "secondary", help="Click to switch to the Login form"):
             st.session_state['active_window'] = "Login Window"
             st.rerun()
     with col_w2:
         is_signup = st.session_state['active_window'] == "Signup Window"
-        if st.button("Signup", use_container_width=True, type="primary" if is_signup else "secondary", help="Click to register a new business account"):
+        if st.button("Signup", use_container_width=True, type="primary" if is_signup else "secondary", help="Click to switch to the Account Registration form"):
             st.session_state['active_window'] = "Signup Window"
             st.rerun()
 
@@ -256,7 +256,7 @@ if not st.session_state['logged_in']:
                 refresh_locked_captcha("login")
                 st.rerun()
 
-        # Dynamic State Evaluation to Ensure Button Enables Instantly
+        # Dynamic State Evaluation for Instant Activation
         val_id = st.session_state.get('login_id_input', login_id)
         val_pw = st.session_state.get('login_pw_input', login_password)
         val_cap = st.session_state.get('login_cap_input', login_captcha)
@@ -266,7 +266,8 @@ if not st.session_state['logged_in']:
         if not login_form_valid:
             st.info("💡 Please fill in your Login ID, Password, and Captcha answer to enable the Login button.")
 
-        submit_login = st.button("🔑 Login to Dashboard", type="primary", disabled=not login_form_valid, help="Authenticate credentials and access your dashboard")
+        # NO HELP PARAMETER HERE -> NO COMMENT/TOOLTIP UPON HOVER OR CLICK
+        submit_login = st.button("🔑 Login to Dashboard", type="primary", disabled=not login_form_valid)
 
         if submit_login:
             if not str(val_cap).strip().isnumeric() or int(str(val_cap).strip()) != l_ans:
@@ -331,7 +332,8 @@ if not st.session_state['logged_in']:
             otp_val = st.session_state.get('otp_input_key', entered_otp)
             otp_valid = bool(otp_val and str(otp_val).strip())
             
-            submit_otp = st.button("✅ Verify OTP & Finalize Account", type="primary", disabled=not otp_valid, help="Verify code to complete registration")
+            # NO HELP PARAMETER HERE -> NO TOOLTIP COMMENT
+            submit_otp = st.button("✅ Verify OTP & Finalize Account", type="primary", disabled=not otp_valid)
             
             if submit_otp:
                 if str(otp_val).strip() == st.session_state['generated_otp']:
@@ -350,7 +352,7 @@ if not st.session_state['logged_in']:
                     st.error("❌ Invalid OTP Code. Please re-check and enter again.")
 
             st.markdown("---")
-            if st.button("👉 Go to Login Window", help="Switch to login window"):
+            if st.button("👉 Go to Login Window", help="Click to switch to the account login window"):
                 st.session_state['active_window'] = "Login Window"
                 st.rerun()
 
@@ -434,11 +436,11 @@ if not st.session_state['logged_in']:
                 elif not all_required_filled:
                     st.info("💡 Please fill in all required fields (*) to enable the verification button.")
 
+            # NO HELP PARAMETER HERE -> NO COMMENT/TOOLTIP UPON HOVER OR CLICK
             submit_signup = st.button(
                 "🚀 Verify & Create Account",
                 type="primary",
-                disabled=signup_button_disabled,
-                help="Click to generate security OTP and proceed with account creation"
+                disabled=signup_button_disabled
             )
 
             if submit_signup:
@@ -501,7 +503,7 @@ else:
         st.caption(f"Category: {biz_info.get('business_type', 'General')} | Handle: @{biz_info.get('username', 'business')} | Contact: {biz_info.get('phone', '')}")
 
     with top_c3:
-        if st.button("🚪 Logout", help="Logout from your business account safely"):
+        if st.button("🚪 Logout", help="Click to log out safely from your business dashboard session"):
             st.session_state['logged_in'] = False
             st.session_state['user_email'] = ""
             st.session_state['business_id'] = ""
@@ -584,7 +586,7 @@ else:
     custom_time = st.sidebar.time_input("Transaction Time:", value=current_now.time())
     entry_timestamp = datetime.combine(custom_date, custom_time).strftime("%Y-%m-%d %H:%M:%S")
 
-    if st.sidebar.button("Process & Save Transaction", help="Parse SMS text and post entry into ledger database"):
+    if st.sidebar.button("Process & Save Transaction", help="Click to parse SMS text and save entry into ledger database"):
         if user_sms.strip():
             parsed_record = parse_sms_logic(user_sms)
             parsed_record["timestamp"] = entry_timestamp
@@ -678,7 +680,7 @@ else:
                     data=csv_data,
                     file_name=f"{biz_info.get('username', 'ledger')}_transactions.csv",
                     mime="text/csv",
-                    help="Download filtered transactions in CSV spreadsheet format"
+                    help="Click to download filtered transactions in CSV spreadsheet format"
                 )
                 
                 excel_data = convert_df_to_excel(filtered_df)
@@ -687,7 +689,7 @@ else:
                     data=excel_data,
                     file_name=f"{biz_info.get('username', 'ledger')}_transactions.xlsx",
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    help="Download filtered transactions in Microsoft Excel format"
+                    help="Click to download filtered transactions in Microsoft Excel format"
                 )
 
             display_df = filtered_df.copy()
