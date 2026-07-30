@@ -16,13 +16,13 @@ st.set_page_config(page_title="Asif Ledger Solutions", layout="wide")
 
 # Session State Initializations
 if 'active_window' not in st.session_state:
-    st.session_state['active_window'] = "Login Window"  # Default Left Window Selected
+    st.session_state['active_window'] = "Login Window"
 
 if 'del_selected_btn' not in st.session_state:
-    st.session_state['del_selected_btn'] = 'left'  # Default Left Selected for Dialog
+    st.session_state['del_selected_btn'] = 'left'
 
 if 'reactivate_selected_btn' not in st.session_state:
-    st.session_state['reactivate_selected_btn'] = 'left'  # Default Left Selected for Reactivation
+    st.session_state['reactivate_selected_btn'] = 'left'
 
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
@@ -104,13 +104,13 @@ def get_db():
 
 db = get_db()
 
-# Country Codes Data
+# Country Codes Data with strict formatting limits
 COUNTRY_DATA = {
-    "🇵🇰 +92": {"code": "92", "placeholder": "3001234567"},
-    "🇦🇪 +971": {"code": "971", "placeholder": "501234567"},
-    "🇸🇦 +966": {"code": "966", "placeholder": "501234567"},
-    "🇬🇧 +44": {"code": "44", "placeholder": "7911123456"},
-    "🇺🇸 +1": {"code": "1", "placeholder": "2015550123"}
+    "🇵🇰 +92": {"code": "92", "placeholder": "300 1234567", "length": 10, "format_example": "+92 300 1234567"},
+    "🇦🇪 +971": {"code": "971", "placeholder": "50 1234567", "length": 9, "format_example": "+971 50 1234567"},
+    "🇸🇦 +966": {"code": "966", "placeholder": "50 1234567", "length": 9, "format_example": "+966 50 1234567"},
+    "🇬🇧 +44": {"code": "44", "placeholder": "7911 123456", "length": 10, "format_example": "+44 7911 123456"},
+    "🇺🇸 +1": {"code": "1", "placeholder": "201 555 0123", "length": 10, "format_example": "+1 201 555 0123"}
 }
 
 def make_hash(password):
@@ -352,7 +352,6 @@ if not st.session_state['logged_in']:
     
     col_w1, col_w2, _ = st.columns([1, 1, 2])
     
-    # Native Streamlit button types
     login_btn_type = "primary" if st.session_state['active_window'] == "Login Window" else "secondary"
     signup_btn_type = "primary" if st.session_state['active_window'] == "Signup Window" else "secondary"
 
@@ -508,19 +507,47 @@ if not st.session_state['logged_in']:
 
         else:
             st.markdown("### 📝 Create New Business Account")
+            
+            # --- REAL-TIME TAB / OUT-OF-FORM LIVE VALIDATIONS ---
+            check_email = st.text_input("User Email Address *", placeholder="name@domain.com", key="live_signup_email")
+            email_clean = check_email.lower().strip()
+            
+            # INSTANT TAB EMAIL CHECK & ALERT POPUP
+            if email_clean:
+                if not validate_email_format(email_clean):
+                    st.error("🚨 Invalid Email Address format!")
+                elif db.collection('users').document(email_clean).get().exists:
+                    st.error("🚨 THIS EMAIL IS ALREADY REGISTERED! Please try logging in or use another email.")
+
+            st.markdown("#### 📞 Contact Phone Number *")
+            p_col1, p_col2 = st.columns([1.2, 2.8])
+            with p_col1:
+                selected_country = st.selectbox("Country Code", list(COUNTRY_DATA.keys()), key="live_country_select")
+            
+            country_info = COUNTRY_DATA[selected_country]
+            
+            with p_col2:
+                # Dynamic Key ensures Placeholder & Format rules instantly refresh on country change
+                check_phone = st.text_input(
+                    f"Phone Number (Max {country_info['length']} digits)",
+                    placeholder=country_info["placeholder"],
+                    key=f"phone_input_{selected_country}"
+                )
+
+            phone_clean = re.sub(r'\D', '', check_phone)
+            extracted_code = country_info["code"]
+            formatted_phone_key = f"+{extracted_code}_{phone_clean}"
+
+            # INSTANT TAB PHONE CHECK & ALERT POPUP
+            if phone_clean:
+                if len(phone_clean) != country_info['length']:
+                    st.warning(f"⚠️ Phone number for {selected_country} must be exactly {country_info['length']} digits. Format: {country_info['format_example']}")
+                elif db.collection('phone_numbers').document(formatted_phone_key).get().exists:
+                    st.error("🚨 THIS PHONE NUMBER IS ALREADY REGISTERED! Please use a different number.")
+
             s_n1, s_n2, s_ans = get_locked_captcha("signup")
 
             with st.form("signup_form"):
-                check_email = st.text_input("User Email Address *", placeholder="name@domain.com")
-                
-                st.markdown("#### 📞 Contact Phone Number *")
-                p_col1, p_col2 = st.columns([1, 3])
-                with p_col1:
-                    selected_country = st.selectbox("Country Code", list(COUNTRY_DATA.keys()))
-                country_info = COUNTRY_DATA[selected_country]
-                with p_col2:
-                    check_phone = st.text_input("Phone Number", placeholder=country_info["placeholder"])
-
                 grid_c1, grid_c2 = st.columns(2)
                 with grid_c1:
                     password = st.text_input("Unique Password *", type="password", placeholder="8+ chars, Uppercase, Number & Symbol")
@@ -537,15 +564,12 @@ if not st.session_state['logged_in']:
                 submit_signup = st.form_submit_button("Submit")
 
             if submit_signup:
-                email_clean = check_email.lower().strip()
-                phone_clean = re.sub(r'\D', '', check_phone)
-                extracted_code = country_info["code"]
-                formatted_phone_key = f"+{extracted_code}_{phone_clean}"
-
                 if not email_clean or not password or not biz_name or not phone_clean or not captcha_input:
                     st.warning("⚠️ Please fill in all required fields (*).")
                 elif not validate_email_format(email_clean):
                     st.error("🚨 Invalid Email Address format!")
+                elif len(phone_clean) != country_info['length']:
+                    st.error(f"🚨 Phone number must be exactly {country_info['length']} digits for {selected_country}.")
                 elif db.collection('users').document(email_clean).get().exists:
                     st.error("🚨 This Email is already registered!")
                 elif db.collection('phone_numbers').document(formatted_phone_key).get().exists:
