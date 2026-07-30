@@ -14,7 +14,46 @@ from google.oauth2 import service_account
 # Page Setup
 st.set_page_config(page_title="Asif Ledger Solutions - PC Edition", layout="wide")
 
-# Session State Initializations
+# Database Connection
+@st.cache_resource
+def get_db():
+    if "FIREBASE_KEY" in st.secrets:
+        key_dict = json.loads(st.secrets["FIREBASE_KEY"])
+        creds = service_account.Credentials.from_service_account_info(key_dict)
+        return firestore.Client(credentials=creds, project=key_dict["project_id"])
+    else:
+        key_path = r"C:\projects\serviceAccountKey.json"
+        return firestore.Client.from_service_account_json(key_path)
+
+db = get_db()
+
+# Native Timezone
+def get_current_time():
+    return datetime.now(ZoneInfo('Asia/Karachi'))
+
+def make_hash(password):
+    return hashlib.sha256(str.encode(password)).hexdigest()
+
+# ---------------- PERSISTENT SESSION VIA QUERY PARAMS ----------------
+# Restore login state on browser refresh using URL Query Params
+query_params = st.query_params
+session_email = query_params.get("user", "")
+session_role = query_params.get("role", "Owner")
+
+if 'logged_in' not in st.session_state:
+    if session_email:
+        user_doc = db.collection('users').document(session_email).get()
+        if user_doc.exists:
+            st.session_state['logged_in'] = True
+            st.session_state['user_email'] = session_email
+            st.session_state['business_id'] = session_email
+            st.session_state['business_details'] = user_doc.to_dict()
+            st.session_state['user_role'] = session_role
+        else:
+            st.session_state['logged_in'] = False
+    else:
+        st.session_state['logged_in'] = False
+
 if 'active_window' not in st.session_state:
     st.session_state['active_window'] = "Login Window"
 
@@ -24,8 +63,6 @@ if 'del_selected_btn' not in st.session_state:
 if 'reactivate_selected_btn' not in st.session_state:
     st.session_state['reactivate_selected_btn'] = 'left'
 
-if 'logged_in' not in st.session_state:
-    st.session_state['logged_in'] = False
 if 'user_email' not in st.session_state:
     st.session_state['user_email'] = ""
 if 'business_id' not in st.session_state:
@@ -33,7 +70,7 @@ if 'business_id' not in st.session_state:
 if 'business_details' not in st.session_state:
     st.session_state['business_details'] = {}
 if 'user_role' not in st.session_state:
-    st.session_state['user_role'] = "Owner"  # Default Owner
+    st.session_state['user_role'] = "Owner"
 if 'otp_step' not in st.session_state:
     st.session_state['otp_step'] = False
 if 'generated_otp' not in st.session_state:
@@ -51,10 +88,21 @@ if 'reactivate_prompt' not in st.session_state:
 if 'pending_login_data' not in st.session_state:
     st.session_state['pending_login_data'] = {}
 
-# NATIVE CSS OVERRIDES
+# NATIVE CSS OVERRIDES (INCLUDING LINK HOVER OVERRIDE TO BLUE)
 st.markdown("""
 <style>
-    /* 1. PRIMARY BUTTONS (SELECTED / ACTIVE = BLUE) */
+    /* 1. LINK HOVER COLOR OVERRIDE TO BLUE */
+    a {
+        color: #003366 !important;
+        text-decoration: none !important;
+        transition: color 0.2s ease-in-out !important;
+    }
+    a:hover, a:focus, a:active {
+        color: #002244 !important;
+        text-decoration: underline !important;
+    }
+
+    /* 2. PRIMARY BUTTONS */
     button[kind="primary"],
     div[data-testid="stFormSubmitButton"] > button {
         background-color: #003366 !important;
@@ -72,7 +120,7 @@ st.markdown("""
         box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.25) !important;
     }
 
-    /* 2. SECONDARY BUTTONS (UNSELECTED / INACTIVE = WHITE) */
+    /* 3. SECONDARY BUTTONS */
     button[kind="secondary"] {
         background-color: #ffffff !important;
         color: #003366 !important;
@@ -89,23 +137,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Native Timezone
-def get_current_time():
-    return datetime.now(ZoneInfo('Asia/Karachi'))
-
-# Database Connection
-@st.cache_resource
-def get_db():
-    if "FIREBASE_KEY" in st.secrets:
-        key_dict = json.loads(st.secrets["FIREBASE_KEY"])
-        creds = service_account.Credentials.from_service_account_info(key_dict)
-        return firestore.Client(credentials=creds, project=key_dict["project_id"])
-    else:
-        key_path = r"C:\projects\serviceAccountKey.json"
-        return firestore.Client.from_service_account_json(key_path)
-
-db = get_db()
-
 # Country Codes Data
 COUNTRY_DATA = {
     "🇵🇰 +92": {"code": "92", "placeholder": "300 1234567", "length": 10, "format_example": "+92 300 1234567"},
@@ -114,9 +145,6 @@ COUNTRY_DATA = {
     "🇬🇧 +44": {"code": "44", "placeholder": "7911 123456", "length": 10, "format_example": "+44 7911 123456"},
     "🇺🇸 +1": {"code": "1", "placeholder": "201 555 0123", "length": 10, "format_example": "+1 201 555 0123"}
 }
-
-def make_hash(password):
-    return hashlib.sha256(str.encode(password)).hexdigest()
 
 def mask_sensitive_text(text, role):
     """Masks phone numbers and private details if user is an Accountant"""
@@ -253,12 +281,9 @@ def show_reactivation_dialog():
             st.session_state['business_details'] = user_data
             st.session_state['user_role'] = "Owner"
             
-            account_label = f"{user_data.get('business_name', 'Business')} (@{user_data.get('username', 'user')})"
-            st.session_state['saved_accounts_dict'][account_label] = {
-                "login": target_email,
-                "password": val_pw
-            }
-            
+            st.query_params["user"] = target_email
+            st.query_params["role"] = "Owner"
+
             st.session_state['reactivate_prompt'] = False
             st.session_state['pending_login_data'] = {}
             st.toast("🎉 Welcome back! Your account has been re-activated.")
@@ -353,6 +378,7 @@ def show_delete_account_dialog():
             st.session_state['active_window'] = "Login Window"
             st.session_state['del_step'] = 1
             st.session_state['show_delete_dialog'] = False
+            st.query_params.clear()
             st.rerun()
 
 if st.session_state.get('show_delete_dialog', False):
@@ -521,6 +547,9 @@ if not st.session_state['logged_in']:
                         st.session_state['business_details'] = user_data
                         st.session_state['user_role'] = user_role
                         
+                        st.query_params["user"] = target_email
+                        st.query_params["role"] = user_role
+                        
                         account_label = f"{user_data.get('business_name', 'Business')} (@{user_data.get('username', 'user')})"
                         st.session_state['saved_accounts_dict'][account_label] = {
                             "login": target_email,
@@ -558,6 +587,9 @@ if not st.session_state['logged_in']:
                     st.session_state['business_id'] = data['email']
                     st.session_state['business_details'] = data
                     st.session_state['user_role'] = "Owner"
+                    
+                    st.query_params["user"] = data['email']
+                    st.query_params["role"] = "Owner"
                     
                     st.session_state['otp_step'] = False
                     st.session_state['generated_otp'] = ""
@@ -704,6 +736,7 @@ else:
             st.session_state['user_role'] = "Owner"
             st.session_state['active_window'] = "Login Window"
             st.session_state['otp_step'] = False
+            st.query_params.clear()
             st.rerun()
 
     st.divider()
