@@ -49,53 +49,36 @@ if 'reactivate_prompt' not in st.session_state:
 if 'pending_login_data' not in st.session_state:
     st.session_state['pending_login_data'] = {}
 
-# Dynamic Selection CSS (Strict Overrides with !important)
+# FIXED NATIVE CSS OVERRIDES
 st.markdown("""
 <style>
-    /* 1. Universal Form Submit Buttons Direct Override */
-    div[data-testid="stFormSubmitButton"] > button,
-    div[data-testid="stFormSubmitButton"] button {
+    /* 1. PRIMARY BUTTONS (SELECTED / ACTIVE = BLUE) */
+    button[kind="primary"],
+    div[data-testid="stFormSubmitButton"] > button {
         background-color: #003366 !important;
         color: #ffffff !important;
         border: 1px solid #002244 !important;
         font-weight: bold !important;
         transition: all 0.3s ease-in-out !important;
     }
-    div[data-testid="stFormSubmitButton"] > button:hover,
-    div[data-testid="stFormSubmitButton"] button:hover {
-        background-color: #002244 !important; /* Office Blue Hover */
+    button[kind="primary"]:hover,
+    div[data-testid="stFormSubmitButton"] > button:hover {
+        background-color: #002244 !important; /* Darker Blue Hover */
         color: #ffffff !important;
         border-color: #001122 !important;
         cursor: pointer !important;
         box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.25) !important;
     }
 
-    /* 2. SELECTED ACTIVE BUTTON (Blue Fill) */
-    div.btn-selected > div[data-testid="stButton"] > button,
-    div.btn-selected button {
-        background-color: #003366 !important;
-        color: #ffffff !important;
-        border: 1px solid #002244 !important;
-        font-weight: bold !important;
-        transition: all 0.3s ease-in-out !important;
-    }
-    div.btn-selected button:hover {
-        background-color: #002244 !important; /* Darker Blue Hover */
-        color: #ffffff !important;
-        cursor: pointer !important;
-        box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.25) !important;
-    }
-
-    /* 3. UNSELECTED INACTIVE BUTTON (White Fill + Blue Border) */
-    div.btn-unselected > div[data-testid="stButton"] > button,
-    div.btn-unselected button {
+    /* 2. SECONDARY BUTTONS (UNSELECTED / INACTIVE = WHITE) */
+    button[kind="secondary"] {
         background-color: #ffffff !important;
         color: #003366 !important;
         border: 1px solid #003366 !important;
         font-weight: bold !important;
         transition: all 0.3s ease-in-out !important;
     }
-    div.btn-unselected button:hover {
+    button[kind="secondary"]:hover {
         background-color: #e6f0fa !important;
         color: #002244 !important;
         border-color: #002244 !important;
@@ -221,11 +204,9 @@ def refresh_locked_captcha(key_prefix):
 def show_not_found_popup():
     st.error("🚨 Business Account Not Found!")
     st.write("No account exists with this Email, Username, or Phone Number. Please create a new account.")
-    st.markdown('<div class="btn-selected">', unsafe_allow_html=True)
-    if st.button("👉 Go to Signup Window Now", use_container_width=True):
+    if st.button("👉 Go to Signup Window Now", type="primary", use_container_width=True):
         st.session_state['active_window'] = "Signup Window"
         st.rerun()
-    st.markdown('</div>', unsafe_allow_html=True)
 
 @st.dialog("🔄 Keep Account or Go Back?")
 def show_reactivation_dialog():
@@ -235,12 +216,11 @@ def show_reactivation_dialog():
     
     col_r1, col_r2 = st.columns(2)
     
-    r_left_class = "btn-selected" if st.session_state['reactivate_selected_btn'] == 'left' else "btn-unselected"
-    r_right_class = "btn-selected" if st.session_state['reactivate_selected_btn'] == 'right' else "btn-unselected"
+    r_left_type = "primary" if st.session_state['reactivate_selected_btn'] == 'left' else "secondary"
+    r_right_type = "primary" if st.session_state['reactivate_selected_btn'] == 'right' else "secondary"
 
     with col_r1:
-        st.markdown(f'<div class="{r_left_class}">', unsafe_allow_html=True)
-        if st.button("Submit", key="btn_reactivate_keep", use_container_width=True):
+        if st.button("Submit", key="btn_reactivate_keep", type=r_left_type, use_container_width=True):
             st.session_state['reactivate_selected_btn'] = 'left'
             target_email = st.session_state['pending_login_data']['email']
             user_data = st.session_state['pending_login_data']['user_data']
@@ -267,17 +247,14 @@ def show_reactivation_dialog():
             st.session_state['pending_login_data'] = {}
             st.toast("🎉 Welcome back! Your account has been re-activated.")
             st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
 
     with col_r2:
-        st.markdown(f'<div class="{r_right_class}">', unsafe_allow_html=True)
-        if st.button("Cancel", key="btn_reactivate_cancel", use_container_width=True):
+        if st.button("Cancel", key="btn_reactivate_cancel", type=r_right_type, use_container_width=True):
             st.session_state['reactivate_selected_btn'] = 'right'
             st.session_state['reactivate_prompt'] = False
             st.session_state['pending_login_data'] = {}
             st.session_state['active_window'] = "Signup Window"
             st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
 
 # ------------------ DELETE ACCOUNT DIALOG ------------------
 @st.dialog("🗑️ Permanently Delete Account")
@@ -291,25 +268,21 @@ def show_delete_account_dialog():
         
         col_d1, col_d2 = st.columns(2)
         
-        left_class = "btn-selected" if st.session_state['del_selected_btn'] == 'left' else "btn-unselected"
-        right_class = "btn-selected" if st.session_state['del_selected_btn'] == 'right' else "btn-unselected"
+        left_type = "primary" if st.session_state['del_selected_btn'] == 'left' else "secondary"
+        right_type = "primary" if st.session_state['del_selected_btn'] == 'right' else "secondary"
 
         with col_d1:
-            st.markdown(f'<div class="{left_class}">', unsafe_allow_html=True)
-            if st.button("YES, I AM SURE", key="btn_del_sure", use_container_width=True):
+            if st.button("YES, I AM SURE", key="btn_del_sure", type=left_type, use_container_width=True):
                 st.session_state['del_selected_btn'] = 'left'
                 st.session_state['del_step'] = 2
                 st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
             
         with col_d2:
-            st.markdown(f'<div class="{right_class}">', unsafe_allow_html=True)
-            if st.button("Cancel", key="btn_del_cancel", use_container_width=True):
+            if st.button("Cancel", key="btn_del_cancel", type=right_type, use_container_width=True):
                 st.session_state['del_selected_btn'] = 'right'
                 st.session_state['show_delete_dialog'] = False
                 st.session_state['del_step'] = 1
                 st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
 
     elif st.session_state['del_step'] == 2:
         st.subheader("🔐 Verify Account Ownership")
@@ -353,8 +326,7 @@ def show_delete_account_dialog():
         )
         
         st.divider()
-        st.markdown('<div class="btn-selected">', unsafe_allow_html=True)
-        if st.button("Submit", key="btn_del_final_submit", use_container_width=True):
+        if st.button("Submit", key="btn_del_final_submit", type="primary", use_container_width=True):
             now_iso = get_current_time().strftime("%Y-%m-%d %H:%M:%S")
             db.collection('users').document(st.session_state['user_email']).update({
                 "status": "deletion_requested",
@@ -369,7 +341,6 @@ def show_delete_account_dialog():
             st.session_state['del_step'] = 1
             st.session_state['show_delete_dialog'] = False
             st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
 
 if st.session_state.get('show_delete_dialog', False):
     show_delete_account_dialog()
@@ -381,23 +352,19 @@ if not st.session_state['logged_in']:
     
     col_w1, col_w2, _ = st.columns([1, 1, 2])
     
-    # Dynamic Check for Main Navigation Buttons
-    login_class = "btn-selected" if st.session_state['active_window'] == "Login Window" else "btn-unselected"
-    signup_class = "btn-selected" if st.session_state['active_window'] == "Signup Window" else "btn-unselected"
+    # Native Streamlit button types
+    login_btn_type = "primary" if st.session_state['active_window'] == "Login Window" else "secondary"
+    signup_btn_type = "primary" if st.session_state['active_window'] == "Signup Window" else "secondary"
 
     with col_w1:
-        st.markdown(f'<div class="{login_class}">', unsafe_allow_html=True)
-        if st.button("🔑 Login", use_container_width=True):
+        if st.button("🔑 Login", type=login_btn_type, use_container_width=True):
             st.session_state['active_window'] = "Login Window"
             st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
 
     with col_w2:
-        st.markdown(f'<div class="{signup_class}">', unsafe_allow_html=True)
-        if st.button("📝 Signup", use_container_width=True):
+        if st.button("📝 Signup", type=signup_btn_type, use_container_width=True):
             st.session_state['active_window'] = "Signup Window"
             st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
 
     st.divider()
 
@@ -535,11 +502,9 @@ if not st.session_state['logged_in']:
                     st.error("❌ Invalid OTP Code. Please re-check and enter again.")
 
             st.markdown("---")
-            st.markdown('<div class="btn-selected">', unsafe_allow_html=True)
-            if st.button("👉 Go to Login Window"):
+            if st.button("👉 Go to Login Window", type="primary"):
                 st.session_state['active_window'] = "Login Window"
                 st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
 
         else:
             st.markdown("### 📝 Create New Business Account")
@@ -642,7 +607,7 @@ else:
         st.caption(f"Category: {biz_info.get('business_type', 'General')} | Handle: @{biz_info.get('username', 'business')} | Contact: {biz_info.get('phone', '')}")
 
     with top_c3:
-        if st.button("🚪 Logout"):
+        if st.button("🚪 Logout", type="secondary"):
             st.session_state['logged_in'] = False
             st.session_state['user_email'] = ""
             st.session_state['business_id'] = ""
@@ -799,10 +764,8 @@ else:
     with bot_col1:
         st.caption("🔒 Security & Data Privacy Zone")
     with bot_col2:
-        st.markdown('<div class="btn-selected">', unsafe_allow_html=True)
-        if st.button("🗑️ Delete Account", use_container_width=True):
+        if st.button("🗑️ Delete Account", type="primary", use_container_width=True):
             st.session_state['del_selected_btn'] = 'left'
             st.session_state['del_step'] = 1
             st.session_state['show_delete_dialog'] = True
             st.rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
